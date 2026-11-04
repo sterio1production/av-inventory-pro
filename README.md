@@ -165,5 +165,7 @@ npx serve .          # or: python -m http.server
 
 ## Credits & license
 
-Built on the *Inventory Management Pro — Audio Visual* single-file prototype by the
-Stereo 1 Production team. MIT licensed — see [LICENSE](LICENSE).
+Built on the *Inventory Management Pro — Audio Visual* single-file prototype, included at
+[`prototype/original-prototype.html`](prototype/original-prototype.html). The header now
+reads **Audio Visual Department** (edit the `ORG` constant in `app.js` for your own
+organisation). MIT licensed — see [LICENSE](LICENSE).

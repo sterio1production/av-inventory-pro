@@ -50,9 +50,9 @@ function seed() {
   const cats = ['Cameras', 'Audio', 'Lighting', 'Projection', 'Cables', 'Computing', 'Support'].map(n => ({ id: uid(), n }));
   const locs = ['Media Studio', 'Main Auditorium', 'Control Room', 'Storage Cage'].map(n => ({ id: uid(), n }));
   const people = [
-    ['Amara Okello', 'amara@stereo1.example'], ['Daniel Mugisha', 'daniel@stereo1.example'],
-    ['Grace Nakato', 'grace@stereo1.example'], ['Brian Ssemwogerere', 'brian@stereo1.example'],
-    ['Lydia Achieng', 'lydia@stereo1.example']
+    ['Amara Okello', 'amara@avdept.example'], ['Daniel Mugisha', 'daniel@avdept.example'],
+    ['Grace Nakato', 'grace@avdept.example'], ['Brian Ssemwogerere', 'brian@avdept.example'],
+    ['Lydia Achieng', 'lydia@avdept.example']
   ].map(([n, c]) => ({ id: uid(), n, contact: c }));
   const c = n => cats.find(x => x.n == n).id, l = n => locs.find(x => x.n == n).id;
   /* name|category|location|qty|min|price|supplier|purchased|serials */
@@ -286,7 +286,7 @@ function delItem(id) {
 }
 
 /* ---------- movement register (returnable & permanent) ---------- */
-const ORG = { name: 'Stereo 1 Production', sub: 'Sound · Lighting · Staging · Live-stream AV — Kampala, Uganda' }; /* edit for your organisation */
+const ORG = { name: 'Audio Visual Department', sub: 'Inventory · Checkout · Approvals' }; /* edit for your organisation */
 const defAppr = () => ({ hod: { n: '', d: '', s: 'Pending' }, gm: { n: '', d: '', s: 'Pending' } });
 function normAppr(a) { a = a && typeof a == 'object' ? a : {}; const fix = (x, d) => ({ n: (x && x.n) || '', d: (x && x.d) || '', s: x && ['Approved', 'Rejected'].includes(x.s) ? x.s : 'Pending' }); return { hod: fix(a.hod, defAppr().hod), gm: fix(a.gm, defAppr().gm) }; }
 function nextMvt() { let m = 0; S.co.forEach(c => { const x = /^MV-(\d+)$/.exec(c.mvt || ''); if (x) m = Math.max(m, +x[1]); }); return 'MV-' + String(m + 1).padStart(4, '0'); }
