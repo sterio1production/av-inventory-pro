@@ -24,6 +24,9 @@ dependencies** and no build step.
 - **Online:** open the live URL above.
 - **Offline:** download the folder and double-click `index.html` — it runs from `file://`
   with no server, no install, no internet.
+- **First run starts empty.** Load your real stock with *Data & Backup → Restore backup*
+  (a JSON backup in this app's format), or let GitHub sync pull it. *Load demo data*
+  fills a sample set if you want to try the workflow; sample data is never auto-loaded.
 - Data is stored in the browser's `localStorage` under the same key as the original
   prototype, so existing data upgrades in place (see *Migration* below).
 
@@ -68,7 +71,8 @@ dependencies** and no build step.
   reference implementation.
 - **Setup lists** — categories, locations, people (with contact details).
 - **Data & backup** — full JSON backup and restore with validation, storage usage stats,
-  reset/erase.
+  reset/erase. The production dataset (AMIT AV-IT store stock, April 2024: 236 stock
+  lines + 157 installed lines) lives in the private sync repo, not in this public one.
 - **GitHub sync** — data saved as a file in a repo, shared across devices (see below).
 - **Activity log** — last 200 mutations, human-readable.
 - **Dark mode** — follows the OS, with an Auto → Light → Dark toggle; responsive layout

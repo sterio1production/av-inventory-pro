@@ -45,8 +45,13 @@ function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e
 function log(m) { S.log.unshift({ t: Date.now(), m }); S.log = S.log.slice(0, 200); }
 const nm = (a, id) => (S[a].find(x => x.id == id) || { n: '—' }).n;
 
-/* ---------- sample data ---------- */
+/* ---------- first-run state & demo data ---------- */
+/* First run starts EMPTY — load your real stock via Data & Backup → Restore backup,
+   or let GitHub sync pull it. demoSeed() provides an optional sample set. */
 function seed() {
+  return { ver: 2, items: [], cats: [{ id: uid(), n: 'General' }], locs: [{ id: uid(), n: 'AV Store' }], people: [], co: [], svc: [], rooms: [], inst: [], log: [{ t: Date.now(), m: 'Welcome — add an item, restore a backup, or load the demo data' }] };
+}
+function demoSeed() {
   const cats = ['Cameras', 'Audio', 'Lighting', 'Projection', 'Cables', 'Computing', 'Support'].map(n => ({ id: uid(), n }));
   const locs = ['Media Studio', 'Main Auditorium', 'Control Room', 'Storage Cage'].map(n => ({ id: uid(), n }));
   const people = [
@@ -101,7 +106,8 @@ SanDisk 1TB SSD|Computing|Media Studio|6|3|110|Amazon|2024-02-11|`;
     { id: uid(), item: items[8].id, date: day(-40), what: 'Firmware update and connector check', by: 'Daniel M.', cost: 0 },
     { id: uid(), item: items[2].id, date: day(-75), what: 'Sensor cleaning and full inspection', by: 'Amara O.', cost: 60 }
   ];
-  return { ver: 2, items, cats, locs, people, co, svc, log: [{ t: Date.now(), m: 'Sample data loaded (v2)' }] };
+  const d = seedInst();
+  return { ver: 2, items, cats, locs, people, co, svc, rooms: d.rooms, inst: d.inst, log: [{ t: Date.now(), m: 'Demo data loaded' }] };
 }
 
 function seedInst() {
@@ -574,7 +580,7 @@ function datav() {
   <div class="grid">
   <div class="card"><h3>Export CSV</h3><p class="mu">Spreadsheet-friendly exports of current data.</p><div class="row"><button class="p" onclick="csvItems()">Equipment CSV</button><button onclick="csvCO()">Checkout history CSV</button></div></div>
   <div class="card"><h3>Backup / restore (JSON)</h3><p class="mu">Full snapshot — items, checkouts, service records, installs, log. Data lives only in this browser: keep regular off-device copies.</p><div class="row"><button class="p" onclick="jsonExport()">Download backup</button><label class="filebtn">Restore backup…<input type="file" accept=".json,application/json" onchange="jsonImport(this)"></label></div></div>
-  <div class="card"><h3>Danger zone</h3><div class="row"><button class="d" onclick="resetSample()">Reset to sample data</button><button class="d" onclick="clearAll()">Erase all data</button></div></div>
+  <div class="card"><h3>Danger zone</h3><div class="row"><button onclick="resetSample()">Load demo data</button><button class="d" onclick="clearAll()">Erase all data</button></div></div>
   <div class="card"><h3>Storage</h3><div class="kv"><i>Items</i><b>${S.items.length}</b><i>Checkouts</i><b>${S.co.length}</b><i>Service records</i><b>${S.svc.length}</b><i>Installed equipment</i><b>${S.inst.length}</b><i>Log entries</i><b>${S.log.length}</b><i>Size on disk</i><b>${kb}</b></div></div></div>`;
 }
 function download(name, mime, content) {
@@ -614,7 +620,7 @@ function jsonImport(inp) {
   };
   r.readAsText(f);
 }
-function resetSample() { if (confirm('Reset all data to the sample set?')) { S = seed(); save(); render(); } }
+function resetSample() { if (confirm('Load the demo data set? This replaces ALL current data — export a backup first.')) { S = demoSeed(); save(); render(); } }
 function clearAll() {
   if (confirm('Erase ALL data? Export a backup first — this cannot be undone.')) {
     S = { ver: 2, items: [], cats: [], locs: [], people: [], co: [], svc: [], rooms: [], inst: [], log: [{ t: Date.now(), m: 'All data erased' }] };
