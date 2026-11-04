@@ -11,9 +11,9 @@ dependencies** and no build step.
 | --- | --- |
 | ![Dashboard](docs/screenshots/dashboard.png) | ![Equipment](docs/screenshots/equipment.png) |
 
-| Item detail (barcode + history) | Data view with GitHub sync |
+| Item detail (barcode + history) | Reports — per location / per room |
 | --- | --- |
-| ![Item detail](docs/screenshots/item-detail.png) | ![Data & Backup](docs/screenshots/data.png) |
+| ![Item detail](docs/screenshots/item-detail.png) | ![Reports](docs/screenshots/reports.png) |
 
 ## Quick start
 
@@ -33,20 +33,32 @@ dependencies** and no build step.
   threshold and unit price. Search spans name/SKU/serials/supplier/notes; filter by
   category, location and status (in stock / low / out / service due); sortable columns.
 - **Item detail page** — full record, live Code 39 barcode preview, one-click
-  *Check out / Edit / Log service / Print label*, plus per-item checkout and service
+  *New movement / Edit / Log service / Print label*, plus per-item movement and service
   history.
-- **Checkout / check-in** — multi-quantity loans (check out 6 XLR cables in one record),
-  due dates, overdue detection with days-late badges, permanent history.
+- **Movement register (returnable & permanent)** — replaces a plain checkout with proper
+  issue vouchers: movement numbers (`MV-0001…`), **multi-item lines**, and three movement
+  types — *Returnable* (loan with due date, must be checked back in; overdue badges),
+  *Permanent transfer* (quantity physically moves to another location, creating/merging a
+  stock line there) and *Permanent consumed / written off* (quantity leaves inventory with
+  a recorded reason). Every movement stays in the register under its number.
+- **Reports** — select a specific **location** (Media Studio, Storage Cage…) or a specific
+  **room** (Conference Room A/B, Board Room…) and generate that inventory list, plus a
+  summary-per-location table (items, units, value, low/out counts) — each exportable.
+- **Exports: Excel, PDF, CSV** — every list (equipment with current filters, movement
+  register, service log, room installs, all reports) exports via one dialog to a real
+  **.xlsx** (built in-app: ZIP + SpreadsheetML, verified in openpyxl), a paginated **PDF**
+  (A4, landscape for wide tables, striped rows — written in-app, no libraries) or CSV.
 - **Service & maintenance** — dated service records with technician and cost;
   next-service dates feed the dashboard "service due" widget and a status filter.
 - **Room installs** — permanently installed equipment per room (displays, VC bars, DSPs…)
   with Working / Needs service / Offline states and per-room health cards.
-- **Setup lists** — categories, locations, people (with contact details).
 - **Asset labels** — printable Code 39 barcode labels with quiet zones; the encoder's
   output was verified symbol-for-symbol against the [bwip-js](https://github.com/metafloor/bwip-js)
   reference implementation.
-- **Data & backup** — CSV export (equipment, checkout history), full JSON backup and
-  restore with validation, **GitHub sync** (below), storage usage stats, reset/erase.
+- **Setup lists** — categories, locations, people (with contact details).
+- **Data & backup** — full JSON backup and restore with validation, storage usage stats,
+  reset/erase.
+- **GitHub sync** — data saved as a file in a repo, shared across devices (see below).
 - **Activity log** — last 200 mutations, human-readable.
 - **Dark mode** — follows the OS, with an Auto → Light → Dark toggle; responsive layout
   down to phone widths.
@@ -58,6 +70,7 @@ dependencies** and no build step.
 | Single-page, zero dependencies | AV departments are not software teams. Any laptop or phone browser can run and maintain it; nothing to install or break. |
 | Availability = qty − Σ(active loan qty) | Modelling loans as quantities (not one record per unit) matches how AV gear actually moves: cases of cables, pairs of monitors. |
 | SKUs separate from serials | SKUs identify the *stock line* for labels and quick scanning; serials remain free-form per item for warranty/insurance paperwork. |
+| Movement register, not just checkout | AV gear also leaves inventory forever: transfers between stores, consumed gaffer tape, written-off broken heads. Modelling both bases in one voucher keeps the audit trail honest. |
 | Service records + next-service date | AV gear fails on maintenance schedules, not just on stock levels. The dashboard surfaces both. |
 | Backup-first data view | `localStorage` is per-browser by design; the system treats export/import as a first-class routine, not an afterthought. |
 | Same storage key + migration | Upgrades the original prototype's data in place — no re-entry. |
@@ -66,7 +79,7 @@ dependencies** and no build step.
 
 ```
 items[]   { id, sku, n, cat, loc, qty, min, price, supplier, purchased, serials, nextsvc, notes }
-co[]      { id, item, who, qty, out, due, back }        // back = return date or null
+co[]      { id, mvt, type, item, who, qty, out, due, back, reason, dest }  // mvt = MV-#### ; type: returnable | transfer | consumed
 svc[]     { id, item, date, what, by, cost }
 cats[] locs[] people[]  { id, n[, contact] }
 rooms[]   { id, n }

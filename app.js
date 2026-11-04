@@ -36,7 +36,7 @@ function migrate(s) {
     if (!i.sku) i.sku = nextSku(used);
     i.serials ??= ''; i.supplier ??= ''; i.purchased ??= ''; i.nextsvc ??= ''; i.notes ??= '';
   });
-  (s.co || []).forEach(c => { c.qty = c.qty || 1; });
+  (s.co || []).forEach(c => { c.qty = c.qty || 1; c.type ??= 'returnable'; c.mvt ??= ''; c.reason ??= ''; c.dest ??= ''; });
   (s.people || []).forEach(p => { p.contact ??= ''; });
   return s;
 }
@@ -94,8 +94,8 @@ SanDisk 1TB SSD|Computing|Media Studio|6|3|110|Amazon|2024-02-11|`;
   const svcDueSeed = { 'Sony FX3 Cinema Camera': day(-12), 'Aputure 300D II LED Light': day(9), 'Epson L610U Laser Projector': day(26) };
   items.forEach(i => { i.nextsvc = svcDueSeed[i.n] || ''; });
   const co = [
-    { id: uid(), item: items[0].id, who: people[0].id, qty: 1, out: day(-9), due: day(-2), back: null },
-    { id: uid(), item: items[4].id, who: people[1].id, qty: 2, out: day(-1), due: day(5), back: null }
+    { id: uid(), mvt: 'MV-0001', type: 'returnable', item: items[0].id, who: people[0].id, qty: 1, out: day(-9), due: day(-2), back: null, reason: 'Client shoot — Kampala', dest: '' },
+    { id: uid(), mvt: 'MV-0002', type: 'returnable', item: items[4].id, who: people[1].id, qty: 2, out: day(-1), due: day(5), back: null, reason: 'Sunday service setup', dest: '' }
   ];
   const svc = [
     { id: uid(), item: items[8].id, date: day(-40), what: 'Firmware update and connector check', by: 'Daniel M.', cost: 0 },
@@ -150,7 +150,7 @@ function cycleTheme() {
 }
 
 /* ---------- nav & render ---------- */
-const NAV = [['dash', 'Dashboard'], ['inv', 'Equipment'], ['co', 'Checkout'], ['svc', 'Service'], ['inst', 'Room Installs'], ['cats', 'Categories'], ['locs', 'Locations'], ['people', 'People'], ['log', 'Activity Log'], ['data', 'Data & Backup']];
+const NAV = [['dash', 'Dashboard'], ['inv', 'Equipment'], ['co', 'Movements'], ['svc', 'Service'], ['inst', 'Room Installs'], ['rpt', 'Reports'], ['cats', 'Categories'], ['locs', 'Locations'], ['people', 'People'], ['log', 'Activity Log'], ['data', 'Data & Backup']];
 function go(v) { view = v; curId = ''; nav.classList.remove('open'); render(); }
 function openItem(id) { curId = id; view = 'item'; render(); }
 function backInv() { view = 'inv'; curId = ''; render(); }
@@ -159,7 +159,7 @@ function render() {
     + NAV.map(([k, t]) => `<a class="${k == view || (view == 'item' && k == 'inv') ? 'on' : ''}" onclick="go('${k}')">${t}</a>`).join('')
     + `<div class="navfoot"><button class="s" id="themeBtn" onclick="cycleTheme()"></button></div>`;
   applyTheme();
-  $('#v').innerHTML = ({ dash, inv, item: itemDetail, co, svc: svcView, inst, cats: () => simple('cats', 'Categories', 'items', 'cat'), locs: () => simple('locs', 'Locations', 'items', 'loc'), people: () => simple('people', 'People', 'co', 'who'), log: logv, data: datav }[view] || dash)();
+  $('#v').innerHTML = ({ dash, inv, item: itemDetail, co, svc: svcView, inst, rpt, cats: () => simple('cats', 'Categories', 'items', 'cat'), locs: () => simple('locs', 'Locations', 'items', 'loc'), people: () => simple('people', 'People', 'co', 'who'), log: logv, data: datav }[view] || dash)();
   save();
 }
 
@@ -189,22 +189,26 @@ function dash() {
 /* ---------- equipment ---------- */
 const ar = k => sort.k == k ? (sort.dir > 0 ? ' ▲' : ' ▼') : '';
 function setSort(k) { if (sort.k === k) sort.dir *= -1; else sort = { k, dir: 1 }; render(); }
-function inv() {
+function invRows() {
   let rows = S.items.filter(i => {
     const hay = (i.n + ' ' + i.sku + ' ' + (i.serials || '') + ' ' + (i.supplier || '') + ' ' + (i.notes || '')).toLowerCase();
     return (!q || hay.includes(q)) && (!fc || i.cat == fc) && (!fl || i.loc == fl) && (!fst || (fst == 'svc' ? svcDue(i) : status(i)[1] == fst));
   });
   const key = { n: x => x.n.toLowerCase(), sku: x => x.sku, cat: x => nm('cats', x.cat), loc: x => nm('locs', x.loc), avail: x => avail(x), price: x => x.price }[sort.k];
-  rows = rows.slice().sort((a, b) => { const va = key(a), vb = key(b); return (va < vb ? -1 : va > vb ? 1 : 0) * sort.dir; });
+  return rows.slice().sort((a, b) => { const va = key(a), vb = key(b); return (va < vb ? -1 : va > vb ? 1 : 0) * sort.dir; });
+}
+function inv() {
+  const rows = invRows();
   const opt = (a, v) => S[a].map(x => `<option value="${x.id}" ${x.id == v ? 'selected' : ''}>${esc(x.n)}</option>`).join('');
   return `<h2>Equipment Inventory</h2><div class="row"><input placeholder="Search name, SKU, serial…" value="${esc(q)}" oninput="q=this.value.toLowerCase();render();const e=$('#v input');e.focus();e.setSelectionRange(99,99)">
   <select onchange="fc=this.value;render()"><option value="">All categories</option>${opt('cats', fc)}</select>
   <select onchange="fl=this.value;render()"><option value="">All locations</option>${opt('locs', fl)}</select>
   <select onchange="fst=this.value;render()"><option value="">All statuses</option><option value="ok" ${fst == 'ok' ? 'selected' : ''}>In stock</option><option value="wn" ${fst == 'wn' ? 'selected' : ''}>Low</option><option value="er" ${fst == 'er' ? 'selected' : ''}>Out of stock</option><option value="svc" ${fst == 'svc' ? 'selected' : ''}>Service due</option></select>
-  <button class="p" onclick="itemForm()">+ Add item</button></div>
+  <button class="p" onclick="itemForm()">+ Add item</button><button onclick="invExp()">Export…</button></div>
   <div class="card tw"><table><tr><th class="sortable" onclick="setSort('sku')">SKU${ar('sku')}</th><th class="sortable" onclick="setSort('n')">Item${ar('n')}</th><th class="sortable" onclick="setSort('cat')">Category${ar('cat')}</th><th class="sortable" onclick="setSort('loc')">Location${ar('loc')}</th><th class="sortable" onclick="setSort('avail')">Avail / Total${ar('avail')}</th><th class="sortable" onclick="setSort('price')">Unit price${ar('price')}</th><th>Status</th><th></th></tr>
   ${rows.map(i => { const s = status(i); return `<tr><td><code>${esc(i.sku)}</code></td><td><a class="lnk" onclick="openItem('${i.id}')" title="Open item detail">${esc(i.n)}</a></td><td>${esc(nm('cats', i.cat))}</td><td>${esc(nm('locs', i.loc))}</td><td>${avail(i)} / ${i.qty}</td><td>${money(i.price)}</td><td><span class="tag ${s[1]}">${s[0]}</span>${svcDue(i) ? ' <span class="tag wn">Service</span>' : ''}</td><td><button class="s" onclick="itemForm('${i.id}')">Edit</button> <button class="s d" onclick="delItem('${i.id}')">Delete</button></td></tr>`; }).join('') || '<tr><td colspan="8" class="mu">No items</td></tr>'}</table></div>`;
 }
+function invExp() { expDlg('Equipment', ['SKU', 'Item', 'Category', 'Location', 'Qty', 'Available', 'Min', 'Unit price', 'Stock value', 'Supplier', 'Purchased', 'Next service', 'Serials', 'Notes'], invRows().map(i => [i.sku, i.n, nm('cats', i.cat), nm('locs', i.loc), i.qty, avail(i), i.min, i.price, i.qty * i.price, i.supplier, i.purchased, i.nextsvc, i.serials, i.notes])); }
 
 /* ---------- item detail ---------- */
 function itemDetail() {
@@ -228,7 +232,7 @@ function itemDetail() {
   <i>Serials</i><b>${i.serials ? esc(i.serials) : '<span class="mu">—</span>'}</b>
   <i>Notes</i><b>${i.notes ? esc(i.notes) : '<span class="mu">—</span>'}</b></div></div>
   <div class="card"><h3>Asset label</h3>${code39Svg(i.sku)}<div class="mu" style="font-size:12px;margin-top:6px">Code 39 · prints with quiet zones</div>
-  <div class="row" style="margin:10px 0 0"><button class="p" onclick="coForm('${i.id}')">Check out</button><button onclick="itemForm('${i.id}')">Edit</button><button onclick="svcForm('${i.id}')">Log service</button><button onclick="printLabel('${i.id}')">Print label</button><button class="d" onclick="delItem('${i.id}')">Delete</button></div></div></div>
+  <div class="row" style="margin:10px 0 0"><button class="p" onclick="coForm('${i.id}')">New movement</button><button onclick="itemForm('${i.id}')">Edit</button><button onclick="svcForm('${i.id}')">Log service</button><button onclick="printLabel('${i.id}')">Print label</button><button class="d" onclick="delItem('${i.id}')">Delete</button></div></div></div>
   <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
   <div class="card"><h3>Checkout history</h3><div class="tw"><table><tr><th>Person</th><th>Qty</th><th>Out</th><th>Due</th><th>Status</th></tr>
   ${hist.map(c => `<tr><td>${esc(nm('people', c.who))}</td><td>${c.qty || 1}</td><td>${c.out}</td><td>${c.due}</td><td>${c.back ? esc(c.back) : overdue(c) ? `<span class="tag er">${late(c)}d late</span>` : '<span class="tag ok">On loan</span>'}</td></tr>`).join('') || '<tr><td colspan="5" class="mu">Never checked out</td></tr>'}</table></div></div>
@@ -281,34 +285,105 @@ function delItem(id) {
   }
 }
 
-/* ---------- checkout / check-in ---------- */
+/* ---------- movement register (returnable & permanent) ---------- */
+function nextMvt() { let m = 0; S.co.forEach(c => { const x = /^MV-(\d+)$/.exec(c.mvt || ''); if (x) m = Math.max(m, +x[1]); }); return 'MV-' + String(m + 1).padStart(4, '0'); }
+const MVTTYPE = { returnable: ['Returnable', 'ok'], transfer: ['Transfer', 'wn'], consumed: ['Written off', 'er'] };
 function co() {
-  const list = S.co.filter(c => tab == 'active' ? !c.back : c.back).sort((a, b) => a.due < b.due ? -1 : 1);
-  return `<h2>Checkout / Check-in</h2><div class="row tabs"><button class="${tab == 'active' ? 'on' : ''}" onclick="tab='active';render()">Active</button><button class="${tab != 'active' ? 'on' : ''}" onclick="tab='hist';render()">History</button><button class="p" onclick="coForm()">+ Check out</button></div>
-  <div class="card tw"><table><tr><th>Item</th><th>Person</th><th>Qty</th><th>Out</th><th>Due</th><th>${tab == 'active' ? 'Status' : 'Returned'}</th><th></th></tr>
-  ${list.map(c => { const it = S.items.find(x => x.id == c.item); return `<tr><td>${it ? `${esc(it.n)} <span class="mu">${esc(it.sku)}</span>` : '<span class="mu">deleted item</span>'}</td><td>${esc(nm('people', c.who))}</td><td>${c.qty || 1}</td><td>${c.out}</td><td>${c.due}</td><td>${tab == 'active' ? (overdue(c) ? `<span class="tag er">${late(c)} day${late(c) > 1 ? 's' : ''} late</span>` : '<span class="tag ok">On loan</span>') : c.back}</td><td>${tab == 'active' ? `<button class="s" onclick="checkin('${c.id}')">Check in</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="7" class="mu">Nothing here</td></tr>'}</table></div>`;
+  const list = S.co.filter(c => tab == 'active' ? (c.type == 'returnable' && !c.back) : tab == 'hist' ? (c.type == 'returnable' && c.back) : c.type != 'returnable')
+    .sort((a, b) => (b.mvt || '').localeCompare(a.mvt || '') || (b.out + '').localeCompare(a.out + ''));
+  return `<h2>Movement register</h2><div class="row tabs">
+  <button class="${tab == 'active' ? 'on' : ''}" onclick="tab='active';render()">Active returns</button>
+  <button class="${tab == 'hist' ? 'on' : ''}" onclick="tab='hist';render()">Returned</button>
+  <button class="${tab == 'perm' ? 'on' : ''}" onclick="tab='perm';render()">Permanent</button>
+  <button class="p" onclick="coForm()">+ Movement form</button><button onclick="coExp()">Export…</button></div>
+  <div class="card tw"><table><tr><th>Mvt #</th><th>Date</th><th>Type</th><th>Item</th><th>Qty</th><th>Issued to</th><th>Destination / purpose</th><th>Due</th><th>Status</th><th></th></tr>
+  ${list.map(c => { const it = S.items.find(x => x.id == c.item); const tt = MVTTYPE[c.type] || MVTTYPE.returnable;
+    return `<tr><td><code>${esc(c.mvt || '—')}</code></td><td>${c.out}</td><td><span class="tag ${tt[1]}">${tt[0]}</span></td>
+    <td>${it ? `${esc(it.n)} <span class="mu">${esc(it.sku)}</span>` : '<span class="mu">deleted item</span>'}</td>
+    <td>${c.qty || 1}</td><td>${esc(nm('people', c.who))}</td>
+    <td>${c.type == 'transfer' && c.dest ? `${esc(nm('locs', c.dest))}${c.reason ? ' — ' + esc(c.reason) : ''}` : esc(c.reason || '—')}</td>
+    <td>${c.type == 'returnable' ? c.due : '—'}</td>
+    <td>${c.type != 'returnable' ? `<span class="tag ${tt[1]}">Closed ${c.back || ''}</span>` : c.back ? esc(c.back) : overdue(c) ? `<span class="tag er">${late(c)} day${late(c) > 1 ? 's' : ''} late</span>` : '<span class="tag ok">On loan</span>'}</td>
+    <td>${c.type == 'returnable' && !c.back ? `<button class="s" onclick="checkin('${c.id}')">Check in</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="10" class="mu">Nothing here</td></tr>'}</table></div>`;
+}
+function coExp() {
+  const H = ['Mvt #', 'Date', 'Type', 'Item', 'SKU', 'Qty', 'Issued to', 'Destination / purpose', 'Due', 'Status'];
+  const rows = S.co.slice().sort((a, b) => (a.mvt || '').localeCompare(b.mvt || '')).map(c => {
+    const it = S.items.find(x => x.id == c.item), tt = (MVTTYPE[c.type] || MVTTYPE.returnable)[0];
+    return [c.mvt || '', c.out, tt, it ? it.n : '', it ? it.sku : '', c.qty || 1, nm('people', c.who), c.type == 'transfer' && c.dest ? nm('locs', c.dest) + (c.reason ? ' — ' + c.reason : '') : (c.reason || ''), c.type == 'returnable' ? c.due : '', c.type == 'permanent' ? 'Closed ' + (c.back || '') : c.back ? 'Returned ' + c.back : (overdue(c) ? 'Overdue' : 'On loan')];
+  });
+  expDlg('Movement register', H, rows);
 }
 function coForm(pre) {
   const av = S.items.filter(i => avail(i) > 0);
   if (!av.length || !S.people.length) return alert('Need available items and at least one person.');
-  dlg(`<h3>Check out equipment</h3>
-  <label>Item<select id="c1" onchange="syncQty()">${av.map(i => `<option value="${i.id}" ${i.id == pre ? 'selected' : ''}>${esc(i.n)} (${avail(i)} avail)</option>`).join('')}</select></label>
-  <label>Quantity<input id="c4" type="number" min="1" value="1"></label>
-  <label>Person${sel('people', '', 'c2')}</label>
-  <label>Due date<input id="c3" type="date" value="${day(7)}"></label>
-  <div class="row"><button class="p" onclick="doOut()">Check out</button><button onclick="$('#dlg').close()">Cancel</button></div>`);
-  syncQty();
+  dlg(`<h3>Movement form</h3>
+  <label>Movement type<select id="m0" onchange="mvtTypeUi()">
+  <option value="returnable">Returnable — item must come back (loan)</option>
+  <option value="transfer">Permanent — transfer to another location</option>
+  <option value="consumed">Permanent — consumed / written off</option></select></label>
+  <div id="lines"></div>
+  <div class="row"><button class="s" onclick="addLine()">+ Add another item</button></div>
+  <label>Issued to (person)${sel('people', '', 'm2')}</label>
+  <div id="dueRow"><label>Due date<input id="m3" type="date" value="${day(7)}"></label></div>
+  <div id="destRow" style="display:none"><label>Destination location${sel('locs', '', 'm4')}</label></div>
+  <label>Destination / purpose — notes<input id="m5" placeholder="e.g. Client wedding at Speke Resort / moved to Storage Cage"></label>
+  <div class="row"><button class="p" onclick="mvtSave()">Save movement</button><button onclick="$('#dlg').close()">Cancel</button></div>`);
+  addLine();
+  if (pre) { const sel1 = $('#lines .ml-item'); if (sel1) { sel1.value = pre; syncLine($('#lines .mvt-line')); } }
+  mvtTypeUi();
 }
-function syncQty() { const it = S.items.find(x => x.id == $('#c1').value); if (it) { const el = $('#c4'); el.max = avail(it); el.value = 1; } }
-function doOut() {
-  const it = S.items.find(x => x.id == $('#c1').value);
-  const qty = Math.max(1, Math.floor(+$('#c4').value || 1));
-  if (!it) return;
-  if (qty > avail(it)) return alert('Only ' + avail(it) + ' available.');
-  const c = { id: uid(), item: it.id, who: $('#c2').value, out: day(0), due: $('#c3').value, back: null, qty };
-  if (!c.due) return;
-  S.co.push(c);
-  log(`${it.n} ×${qty} checked out to ${nm('people', c.who)}`);
+function mvtTypeUi() {
+  const t = $('#m0').value;
+  $('#dueRow').style.display = t == 'returnable' ? '' : 'none';
+  $('#destRow').style.display = t == 'transfer' ? '' : 'none';
+}
+function addLine(qty) {
+  const av = S.items.filter(i => avail(i) > 0);
+  if (!av.length) return;
+  const d = document.createElement('div');
+  d.className = 'row mvt-line'; d.style.margin = '4px 0';
+  d.innerHTML = `<select class="ml-item" style="flex:1;min-width:170px" onchange="syncLine(this.closest('.mvt-line'))">${av.map(i => `<option value="${i.id}">${esc(i.sku)} — ${esc(i.n)} (${avail(i)} avail)</option>`).join('')}</select>
+  <input class="ml-qty" type="number" min="1" value="${qty || 1}" style="width:74px" title="Quantity">`;
+  $('#lines').appendChild(d);
+  syncLine(d);
+}
+function syncLine(d) {
+  const it = S.items.find(x => x.id == d.querySelector('.ml-item').value);
+  if (it) { const el = d.querySelector('.ml-qty'); el.max = avail(it); if (+el.value > avail(it)) el.value = avail(it); }
+}
+function mvtSave() {
+  const type = $('#m0').value, who = $('#m2').value, reason = $('#m5').value.trim();
+  if (!who) return alert('Choose who the items are issued to.');
+  const lines = [...document.querySelectorAll('#dlg .mvt-line')].map(d => ({ item: S.items.find(x => x.id == d.querySelector('.ml-item').value), qty: Math.max(1, Math.floor(+d.querySelector('.ml-qty').value || 1)) })).filter(l => l.item);
+  if (!lines.length) return alert('Add at least one item.');
+  const mvt = nextMvt();
+  if (type == 'returnable') {
+    const due = $('#m3').value;
+    if (!due) return alert('Due date is required for returnable movements.');
+    for (const l of lines) if (l.qty > avail(l.item)) return alert('Only ' + avail(l.item) + ' of ' + l.item.n + ' available.');
+    lines.forEach(l => S.co.push({ id: uid(), mvt, type, item: l.item.id, who, qty: l.qty, out: day(0), due, back: null, reason, dest: '' }));
+    log(`${mvt}: ${lines.map(l => l.item.n + ' ×' + l.qty).join(', ')} issued to ${nm('people', who)} (returnable, due ${due})`);
+  } else if (type == 'transfer') {
+    const dest = $('#m4').value;
+    if (!dest) return alert('Choose a destination location.');
+    for (const l of lines) {
+      if (l.item.loc == dest) return alert(l.item.n + ' is already at ' + nm('locs', dest) + '.');
+      if (l.qty > avail(l.item)) return alert('Only ' + avail(l.item) + ' of ' + l.item.n + ' available.');
+    }
+    lines.forEach(l => {
+      l.item.qty -= l.qty;
+      const dst = S.items.find(x => x.n == l.item.n && x.cat == l.item.cat && x.loc == dest);
+      if (dst) dst.qty += l.qty;
+      else S.items.push({ id: uid(), sku: nextSku(new Set(S.items.map(x => x.sku).filter(Boolean))), n: l.item.n, cat: l.item.cat, loc: dest, qty: l.qty, min: 0, price: l.item.price, supplier: l.item.supplier || '', purchased: l.item.purchased || '', serials: '', nextsvc: '', notes: 'Transferred from ' + l.item.sku });
+      S.co.push({ id: uid(), mvt, type, item: l.item.id, who, qty: l.qty, out: day(0), due: '', back: day(0), reason, dest });
+    });
+    log(`${mvt}: ${lines.map(l => l.item.n + ' ×' + l.qty).join(', ')} transferred to ${nm('locs', dest)} (permanent)`);
+  } else {
+    for (const l of lines) if (l.qty > avail(l.item)) return alert('Only ' + avail(l.item) + ' of ' + l.item.n + ' available.');
+    lines.forEach(l => { l.item.qty -= l.qty; S.co.push({ id: uid(), mvt, type, item: l.item.id, who, qty: l.qty, out: day(0), due: '', back: day(0), reason, dest: '' }); });
+    log(`${mvt}: ${lines.map(l => l.item.n + ' ×' + l.qty).join(', ')} consumed / written off (permanent)`);
+  }
   $('#dlg').close(); render();
 }
 function checkin(id) {
@@ -321,7 +396,7 @@ function checkin(id) {
 /* ---------- service / maintenance ---------- */
 function svcView() {
   const rows = S.svc.slice().sort((a, b) => b.date.localeCompare(a.date));
-  return `<h2>Service & Maintenance</h2><div class="row"><button class="p" onclick="svcForm()">+ Log service</button></div>
+  return `<h2>Service & Maintenance</h2><div class="row"><button class="p" onclick="svcForm()">+ Log service</button><button onclick="svcExp()">Export…</button></div>
   <div class="card tw"><table><tr><th>Date</th><th>Item</th><th>Details</th><th>By</th><th>Cost</th><th></th></tr>
   ${rows.map(x => { const it = S.items.find(i => i.id == x.item); return `<tr><td>${esc(x.date)}</td><td>${it ? `${esc(it.n)} <span class="mu">${esc(it.sku)}</span>` : '<span class="mu">deleted item</span>'}</td><td>${esc(x.what)}</td><td>${esc(x.by || '—')}</td><td>${x.cost ? money(x.cost) : '—'}</td><td><button class="s d" onclick="delSvc('${x.id}')">Delete</button></td></tr>`; }).join('') || '<tr><td colspan="6" class="mu">No service records yet</td></tr>'}</table></div>`;
 }
@@ -342,6 +417,7 @@ function saveSvc() {
   log(`Service logged for ${nm('items', d.item)}: ${d.what}`);
   $('#dlg').close(); render();
 }
+function svcExp() { expDlg('Service log', ['Date', 'Item', 'SKU', 'Details', 'By', 'Cost'], S.svc.slice().sort((a, b) => b.date.localeCompare(a.date)).map(x => { const it = S.items.find(i => i.id == x.item); return [x.date, it ? it.n : '', it ? it.sku : '', x.what, x.by || '', x.cost || 0]; })); }
 function delSvc(id) {
   const x = S.svc.find(a => a.id == id);
   if (confirm('Delete this service record?')) { S.svc = S.svc.filter(a => a !== x); render(); }
@@ -353,7 +429,7 @@ const scls = s => s == 'Working' ? 'ok' : s == 'Offline' ? 'er' : 'wn';
 function inst() {
   const rows = S.inst.filter(x => !fr || x.room == fr);
   return `<h2>Permanently Installed Equipment</h2><div class="grid">${S.rooms.map(r => { const l = S.inst.filter(x => x.room == r.id), bad = l.filter(x => x.st != 'Working').length; return `<div class="card"><h3>${esc(r.n)}</h3><div class="big">${l.length}</div><div class="${bad ? 'wn' : 'mu'}">${bad ? bad + ' need attention' : 'all working'}</div><button class="s d" style="margin-top:8px" onclick="delS('rooms','inst','room','${r.id}')">Remove room</button></div>`; }).join('')}</div>
-  <div class="row"><select onchange="fr=this.value;render()"><option value="">All rooms</option>${S.rooms.map(r => `<option value="${r.id}" ${r.id == fr ? 'selected' : ''}>${esc(r.n)}</option>`).join('')}</select><button onclick="addRoom()">+ Add room</button><button class="p" onclick="instForm()">+ Add install</button></div>
+  <div class="row"><select onchange="fr=this.value;render()"><option value="">All rooms</option>${S.rooms.map(r => `<option value="${r.id}" ${r.id == fr ? 'selected' : ''}>${esc(r.n)}</option>`).join('')}</select><button onclick="addRoom()">+ Add room</button><button class="p" onclick="instForm()">+ Add install</button><button onclick="instExp()">Export…</button></div>
   <div class="card tw"><table><tr><th>Equipment</th><th>Room</th><th>Type</th><th>Model / Serial</th><th>Installed</th><th>Status</th><th></th></tr>
   ${rows.map(x => `<tr><td>${esc(x.n)}</td><td>${esc(nm('rooms', x.room))}</td><td>${esc(x.type)}</td><td>${esc(x.sn)}</td><td>${esc(x.date)}</td><td><span class="tag ${scls(x.st)}">${esc(x.st)}</span></td><td><button class="s" onclick="instForm('${x.id}')">Edit</button> <button class="s d" onclick="delInst('${x.id}')">Delete</button></td></tr>`).join('') || '<tr><td colspan="7" class="mu">No installed equipment</td></tr>'}</table></div>`;
 }
@@ -377,6 +453,7 @@ function delInst(id) {
   if (confirm('Remove ' + x.n + ' from the install list?')) { S.inst = S.inst.filter(a => a !== x); log(`Removed install: ${x.n}`); render(); }
 }
 function addRoom() { const n = (prompt('Room name') || '').trim(); if (n) { S.rooms.push({ id: uid(), n }); log('Added room: ' + n); render(); } }
+function instExp() { expDlg('Installed equipment', ['Equipment', 'Room', 'Type', 'Model / Serial', 'Installed', 'Status'], (fr ? S.inst.filter(x => x.room == fr) : S.inst).map(x => [x.n, nm('rooms', x.room), x.type, x.sn, x.date, x.st])); }
 
 /* ---------- categories / locations / people ---------- */
 const KINDLBL = { cats: 'category', locs: 'location', people: 'person' };
@@ -574,6 +651,156 @@ async function ghSaveCfg() {
   } catch (e) { alert('Settings saved, but the connection test failed: ' + e.message); }
 }
 function ghToggleAuto() { const c = ghCfg(); c.auto = !c.auto; ghSet(c); if (c.auto) ghAuto(); log('GitHub auto-sync ' + (c.auto ? 'enabled' : 'disabled')); render(); }
+
+/* ---------- reports ---------- */
+let rptLoc = '', rptRoom = '';
+function rpt() {
+  const eq = rptLoc ? S.items.filter(i => i.loc == rptLoc) : S.items;
+  const rm = rptRoom ? S.inst.filter(x => x.room == rptRoom) : S.inst;
+  const locOpts = `<option value="">All locations</option>` + S.locs.map(l => `<option value="${l.id}" ${l.id == rptLoc ? 'selected' : ''}>${esc(l.n)}</option>`).join('');
+  const roomOpts = `<option value="">All rooms</option>` + S.rooms.map(r => `<option value="${r.id}" ${r.id == rptRoom ? 'selected' : ''}>${esc(r.n)}</option>`).join('');
+  const sum = S.locs.map(l => { const its = S.items.filter(i => i.loc == l.id); return { n: l.n, items: its.length, units: its.reduce((a, i) => a + i.qty, 0), val: its.reduce((a, i) => a + i.qty * i.price, 0), low: its.filter(i => status(i)[1] == 'wn').length, out: its.filter(i => status(i)[1] == 'er').length }; });
+  return `<h2>Reports</h2>
+  <div class="card" style="margin-bottom:12px"><h3>Equipment inventory per location</h3>
+  <div class="row"><select onchange="rptLoc=this.value;render()">${locOpts}</select><button class="p" onclick="rptExpEq()">Export…</button><span class="mu">${eq.length} items · ${money(eq.reduce((a, i) => a + i.qty * i.price, 0))}</span></div>
+  <div class="tw"><table><tr><th>SKU</th><th>Item</th><th>Category</th><th>Qty</th><th>Avail</th><th>Unit price</th><th>Value</th><th>Status</th></tr>
+  ${eq.map(i => { const s = status(i); return `<tr><td><code>${esc(i.sku)}</code></td><td>${esc(i.n)}</td><td>${esc(nm('cats', i.cat))}</td><td>${i.qty}</td><td>${avail(i)}</td><td>${money(i.price)}</td><td>${money(i.qty * i.price)}</td><td><span class="tag ${s[1]}">${s[0]}</span></td></tr>`; }).join('') || '<tr><td colspan="8" class="mu">No items</td></tr>'}</table></div></div>
+  <div class="card" style="margin-bottom:12px"><h3>Installed equipment per room</h3>
+  <div class="row"><select onchange="rptRoom=this.value;render()">${roomOpts}</select><button class="p" onclick="rptExpRm()">Export…</button><span class="mu">${rm.length} installs · ${rm.filter(x => x.st != 'Working').length} need attention</span></div>
+  <div class="tw"><table><tr><th>Equipment</th><th>Room</th><th>Type</th><th>Model / Serial</th><th>Installed</th><th>Status</th></tr>
+  ${rm.map(x => `<tr><td>${esc(x.n)}</td><td>${esc(nm('rooms', x.room))}</td><td>${esc(x.type)}</td><td>${esc(x.sn)}</td><td>${esc(x.date)}</td><td><span class="tag ${scls(x.st)}">${esc(x.st)}</span></td></tr>`).join('') || '<tr><td colspan="6" class="mu">No installs</td></tr>'}</table></div></div>
+  <div class="card"><h3>Summary per location</h3>
+  <div class="row"><button class="p" onclick="rptExpSum()">Export…</button></div>
+  <div class="tw"><table><tr><th>Location</th><th>Items</th><th>Units</th><th>Stock value</th><th>Low</th><th>Out</th></tr>
+  ${sum.map(r => `<tr><td>${esc(r.n)}</td><td>${r.items}</td><td>${r.units}</td><td>${money(r.val)}</td><td>${r.low || '—'}</td><td>${r.out || '—'}</td></tr>`).join('')}</table></div></div>`;
+}
+function rptExpEq() { const l = rptLoc ? nm('locs', rptLoc) : 'All locations'; expDlg('Equipment — ' + l, ['SKU', 'Item', 'Category', 'Location', 'Qty', 'Available', 'Unit price', 'Stock value', 'Status'], (rptLoc ? S.items.filter(i => i.loc == rptLoc) : S.items).map(i => [i.sku, i.n, nm('cats', i.cat), nm('locs', i.loc), i.qty, avail(i), i.price, i.qty * i.price, status(i)[0]])); }
+function rptExpRm() { const r = rptRoom ? nm('rooms', rptRoom) : 'All rooms'; expDlg('Installed equipment — ' + r, ['Equipment', 'Room', 'Type', 'Model / Serial', 'Installed', 'Status'], (rptRoom ? S.inst.filter(x => x.room == rptRoom) : S.inst).map(x => [x.n, nm('rooms', x.room), x.type, x.sn, x.date, x.st])); }
+function rptExpSum() { expDlg('Summary per location', ['Location', 'Items', 'Units', 'Stock value', 'Low', 'Out'], S.locs.map(l => { const its = S.items.filter(i => i.loc == l.id); return [l.n, its.length, its.reduce((a, i) => a + i.qty, 0), its.reduce((a, i) => a + i.qty * i.price, 0), its.filter(i => status(i)[1] == 'wn').length, its.filter(i => status(i)[1] == 'er').length]; })); }
+
+/* ---------- export engine: Excel (.xlsx) / PDF / CSV, zero dependencies ---------- */
+let EXP = null;
+function expDlg(title, headers, rows) {
+  EXP = { title, headers, rows: rows.map(r => r.map(v => v instanceof Date ? v.toISOString().slice(0, 10) : v)) };
+  dlg(`<h3>Export — ${esc(title)}</h3><p class="mu">${EXP.rows.length} rows × ${headers.length} columns</p><div class="row"><button class="p" onclick="expDl('xlsx')">Excel (.xlsx)</button><button class="p" onclick="expDl('pdf')">PDF</button><button onclick="expDl('csv')">CSV</button></div>`);
+}
+function expDl(fmt) {
+  if (!EXP) return;
+  const { title, headers, rows } = EXP;
+  if (fmt == 'xlsx') dlXlsx(title, headers, rows);
+  else if (fmt == 'pdf') dlPdf(title, headers, rows);
+  else dlCsv(title, headers, rows);
+  log(`Exported "${title}" as ${fmt.toUpperCase()} (${rows.length} rows)`);
+  $('#dlg').close();
+}
+const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'export';
+const xmlEsc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
+function dlCsv(title, headers, rows) {
+  const lines = [headers.map(csvEsc).join(',')];
+  rows.forEach(r => lines.push(r.map(csvEsc).join(',')));
+  download(slug(title) + '-' + today() + '.csv', 'text/csv;charset=utf-8', '\ufeff' + lines.join('\r\n'));
+}
+/* minimal ZIP (stored entries, CRC-32) — enough for valid .xlsx packages */
+function crc32(buf) {
+  let t = [];
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < buf.length; i++) crc = t[(crc ^ buf[i]) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+function zipStore(files) {
+  const enc = new TextEncoder();
+  const u16 = n => [n & 255, (n >> 8) & 255], u32 = n => [n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >>> 24) & 255];
+  const chunks = [], central = []; let off = 0;
+  for (const f of files) {
+    const name = enc.encode(f.name), data = f.data instanceof Uint8Array ? f.data : enc.encode(f.data), crc = crc32(data);
+    const local = new Uint8Array([80, 75, 3, 4, ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length), ...u16(0), ...name]);
+    chunks.push(local, data);
+    central.push(new Uint8Array([80, 75, 1, 2, ...u16(20), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off), ...name]));
+    off += local.length + data.length;
+  }
+  const cs = central.reduce((a, c) => a + c.length, 0);
+  const end = new Uint8Array([80, 75, 5, 6, ...u16(0), ...u16(0), ...u16(files.length), ...u16(files.length), ...u32(cs), ...u32(off), ...u16(0)]);
+  return new Blob([...chunks, ...central, end], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+function dlXlsx(title, headers, rows) {
+  const data = [headers, ...rows];
+  const widths = headers.map((h, i) => Math.max(10, Math.min(38, Math.max(String(h).length, ...rows.map(r => String(r[i] ?? '').length)) + 2)));
+  const cell = (v, ri, ci) => {
+    const ref = String.fromCharCode(65 + ci) + (ri + 1);
+    if (typeof v == 'number' && isFinite(v)) return `<c r="${ref}"><v>${v}</v></c>`;
+    return `<c r="${ref}" t="inlineStr"${ri == 0 ? ' s="1"' : ''}><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`;
+  };
+  const sheetName = slug(title).replace(/[^a-z0-9]/g, '').slice(0, 28) || 'Sheet1';
+  const files = [
+    { name: '[Content_Types].xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>` },
+    { name: '_rels/.rels', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>` },
+    { name: 'xl/workbook.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${xmlEsc(sheetName)}" sheetId="1" r:id="rId1"/></sheets></workbook>` },
+    { name: 'xl/_rels/workbook.xml.rels', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
+    { name: 'xl/styles.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="2"><xf/><xf fontId="1" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>` },
+    { name: 'xl/worksheets/sheet1.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols><sheetData>${data.map((r, ri) => `<row r="${ri + 1}">${r.map((v, ci) => cell(v, ri, ci)).join('')}</row>`).join('')}</sheetData></worksheet>` }
+  ];
+  download(slug(title) + '-' + today() + '.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', zipStore(files));
+}
+function pdfEsc(s) { return String(s ?? '').replace(/[\\()]/g, c => '\\' + c).replace(/[—–]/g, '-').replace(/[’‘]/g, "'").replace(/[“”]/g, '"').replace(/…/g, '...').replace(/[^\x20-\x7E\xA0-\xFF]/g, '?'); }
+function pdfTrunc(s, w, fs) { const mx = Math.max(2, Math.floor((w - 8) / (fs * 0.5))); s = String(s ?? ''); return s.length > mx ? s.slice(0, Math.max(1, mx - 3)) + '...' : s; }
+function dlPdf(title, headers, rows) {
+  const land = headers.length > 7;
+  const W = land ? 842 : 595, H = land ? 595 : 842, M = 36;
+  const usable = W - 2 * M, fs = 8, rh = 15, hh = 17;
+  const wts = headers.map((h, i) => Math.max(String(h).length, ...rows.map(r => String(r[i] ?? '').length), 4));
+  const wsum = wts.reduce((a, b) => a + b, 0) || 1;
+  const colW = wts.map(w => usable * w / wsum);
+  const perPage = Math.max(5, Math.floor((H - 2 * M - 50) / rh));
+  const N = Math.max(1, Math.ceil(rows.length / perPage));
+  const contents = [];
+  for (let p = 0; p < N; p++) {
+    const chunk = rows.slice(p * perPage, (p + 1) * perPage);
+    let y = H - M - 20, s = '';
+    s += `BT /F2 14 Tf ${M} ${y} Td (${pdfEsc(title)}) Tj ET\n`;
+    y -= 13;
+    s += `BT /F1 8 Tf ${M} ${y} Td (Generated ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC - AV Inventory Pro - ${rows.length} rows) Tj ET\n`;
+    y -= 10;
+    s += `0.92 g ${M} ${y - hh + 4} ${usable} ${hh} re f 0 g\n`;
+    let x = M;
+    headers.forEach((h, i) => { s += `BT /F2 ${fs} Tf ${x + 3} ${y - 5} Td (${pdfEsc(pdfTrunc(h, colW[i], fs))}) Tj ET\n`; x += colW[i]; });
+    s += `0.4 w ${M} ${y - hh + 4} m ${W - M} ${y - hh + 4} l S 1 w\n`;
+    y -= hh;
+    chunk.forEach((r, ri) => {
+      if (ri % 2 == 1) s += `0.965 g ${M} ${y - 3} ${usable} ${rh} re f 0 g\n`;
+      x = M;
+      r.forEach((v, i) => {
+        const isNum = typeof v == 'number' && isFinite(v);
+        const txt = isNum ? v.toLocaleString('en-US') : String(v ?? '');
+        const tx = isNum ? x + colW[i] - 3 - txt.length * fs * 0.5 : x + 3;
+        s += `BT /F1 ${fs} Tf ${tx} ${y + 1} Td (${pdfEsc(isNum ? txt : pdfTrunc(txt, colW[i], fs))}) Tj ET\n`;
+        x += colW[i];
+      });
+      y -= rh;
+    });
+    s += `BT /F1 7 Tf ${M} 22 Td (Page ${p + 1} of ${N} - AV Inventory Pro) Tj ET\n`;
+    contents.push(s);
+  }
+  const head = '%PDF-1.4\n';
+  let body = ''; const offs = [];
+  const push = s => { offs.push(head.length + body.length); body += s; };
+  push(`1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n`);
+  push(`2 0 obj\n<< /Type /Pages /Kids [${Array.from({ length: N }, (_, p) => `${4 + 2 * p} 0 R`).join(' ')}] /Count ${N} >>\nendobj\n`);
+  contents.forEach((c, i) => {
+    push(`${3 + 2 * i} 0 obj\n<< /Length ${c.length} >>\nstream\n${c}endstream\nendobj\n`);
+    push(`${4 + 2 * i} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 ${3 + 2 * N} 0 R /F2 ${4 + 2 * N} 0 R >> >> /Contents ${3 + 2 * i} 0 R >>\nendobj\n`);
+  });
+  push(`${3 + 2 * N} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n`);
+  push(`${4 + 2 * N} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>\nendobj\n`);
+  const total = 4 + 2 * N;
+  const xrefPos = head.length + body.length;
+  let xref = `xref\n0 ${total + 1}\n0000000000 65535 f \n`;
+  offs.forEach(o => { xref += String(o).padStart(10, '0') + ' 00000 n \n'; });
+  const all = head + body + xref + `trailer\n<< /Size ${total + 1} /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF`;
+  const u8 = new Uint8Array(all.length);
+  for (let i = 0; i < all.length; i++) { const cc = all.charCodeAt(i); u8[i] = cc > 255 ? 63 : cc; }
+  download(slug(title) + '-' + today() + '.pdf', 'application/pdf', u8);
+}
 
 /* ---------- Code 39 labels (verified against bwip-js reference encoder) ---------- */
 const C39 = { '0': 'nnnwwnwnn', '1': 'wnnwnnnnw', '2': 'nnwwnnnnw', '3': 'wnwwnnnnn', '4': 'nnnwwnnnw', '5': 'wnnwwnnnn', '6': 'nnwwwnnnn', '7': 'nnnwnnwnw', '8': 'wnnwnnwnn', '9': 'nnwwnnwnn', 'A': 'wnnnnwnnw', 'B': 'nnwnnwnnw', 'C': 'wnwnnwnnn', 'D': 'nnnnwwnnw', 'E': 'wnnnwwnnn', 'F': 'nnwnwwnnn', 'G': 'nnnnnwwnw', 'H': 'wnnnnwwnn', 'I': 'nnwnnwwnn', 'J': 'nnnnwwwnn', 'K': 'wnnnnnnww', 'L': 'nnwnnnnww', 'M': 'wnwnnnnwn', 'N': 'nnnnwnnww', 'O': 'wnnnwnnwn', 'P': 'nnwnwnnwn', 'Q': 'nnnnnnwww', 'R': 'wnnnnnwwn', 'S': 'nnwnnnwwn', 'T': 'nnnnwnwwn', 'U': 'wwnnnnnnw', 'V': 'nwwnnnnnw', 'W': 'wwwnnnnnn', 'X': 'nwnnwnnnw', 'Y': 'wwnnwnnnn', 'Z': 'nwwnwnnnn', '-': 'nwnnnnwnw', '.': 'wwnnnnwnn', ' ': 'nwwnnnwnn', '$': 'nwnwnwnnn', '/': 'nwnwnnnwn', '+': 'nwnnnwnwn', '%': 'nnnwnwnwn', '*': 'nwnnwnwnn' };
