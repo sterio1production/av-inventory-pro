@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Inventory Management Pro — Audio Visual</title>
+<style>
+:root{--bg:#f4f5f7;--sf:#fff;--tx:#1b1f27;--mu:#667085;--bd:#e3e6eb;--ac:#4f46e5;--ok:#15803d;--wn:#b45309;--er:#b91c1c;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12141a;--sf:#1b1e27;--tx:#eceef3;--mu:#98a1b3;--bd:#2c303c;--ac:#8b85ff;--ok:#4ade80;--wn:#fbbf24;--er:#f87171;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#12141a;--sf:#1b1e27;--tx:#eceef3;--mu:#98a1b3;--bd:#2c303c;--ac:#8b85ff;--ok:#4ade80;--wn:#fbbf24;--er:#f87171;color-scheme:dark}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;min-height:100vh}
+nav{width:210px;background:var(--sf);border-right:1px solid var(--bd);padding:16px 10px;flex-shrink:0;position:sticky;top:0;height:100vh;transition:transform .2s}
+nav h1{font-size:15px;margin:0 8px 14px}nav h1 small{display:block;color:var(--mu);font-weight:400;font-size:12px}
+nav a{display:block;padding:8px 10px;border-radius:8px;color:var(--mu);cursor:pointer;margin-bottom:2px}
+nav a.on,nav a:hover{background:color-mix(in srgb,var(--ac) 14%,transparent);color:var(--ac)}
+main{flex:1;min-width:0;padding:20px;max-width:1100px}
+.top{display:none;align-items:center;gap:10px;margin-bottom:12px}
+h2{margin:0 0 14px;font-size:20px}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:12px}
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:14px;min-width:0}
+.card h3{margin:0 0 10px;font-size:13px;color:var(--mu);font-weight:600}
+.big{font-size:26px;font-weight:700}.mu{color:var(--mu)}.ok{color:var(--ok)}.wn{color:var(--wn)}.er{color:var(--er)}
+.bar{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:12px}.bar i{display:block;height:10px;border-radius:5px;background:var(--ac)}.bar span:first-child{width:90px;flex-shrink:0}
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--bd);white-space:nowrap}th{color:var(--mu);font-size:12px;font-weight:600}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+input,select,button{font:inherit;color:var(--tx);background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:7px 10px}
+button{cursor:pointer}button.p{background:var(--ac);color:#fff;border-color:var(--ac)}button.d{color:var(--er)}button.s{padding:4px 8px;font-size:12px}
+.tag{display:inline-block;padding:2px 8px;border-radius:99px;font-size:12px;border:1px solid currentColor}
+.tabs button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+dialog{border:1px solid var(--bd);border-radius:14px;background:var(--sf);color:var(--tx);padding:18px;width:min(420px,92vw)}
+dialog::backdrop{background:#0008}dialog label{display:block;margin:8px 0;font-size:12px;color:var(--mu)}dialog input,dialog select{width:100%;margin-top:3px}
+.log li{padding:6px 0;border-bottom:1px solid var(--bd);list-style:none}.log{margin:0;padding:0}
+@media(max-width:760px){nav{position:fixed;z-index:5;transform:translateX(-100%);left:0;top:0}nav.open{transform:none}.top{display:flex}main{padding:14px}}
+</style></head><body>
+<nav id="nav"></nav><main><div class="top"><button onclick="nav.classList.toggle('open')">☰</button><b>AV Inventory Pro</b></div><div id="v"></div></main>
+<dialog id="dlg"></dialog>
+<script>
+const $=s=>document.querySelector(s),uid=()=>Math.random().toString(36).slice(2,8);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const day=n=>{const d=new Date();d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)};
+const money=n=>'$'+Math.round(n).toLocaleString();
+const KEY='avinv-pro-1';let S,view='dash',tab='active',q='',fc='',fl='';
+function seed(){
+ const cats=['Cameras','Audio','Lighting','Projection','Cables','Computing','Support'].map(n=>({id:uid(),n}));
+ const locs=['Media Studio','Main Auditorium','Control Room','Storage Cage'].map(n=>({id:uid(),n}));
+ const people=['Amara Okello','Daniel Mugisha','Grace Nakato','Brian Ssemwogerere','Lydia Achieng'].map(n=>({id:uid(),n}));
+ const c=n=>cats.find(x=>x.n==n).id,l=n=>locs.find(x=>x.n==n).id;
+ const raw=`Sony FX3 Cinema Camera|Cameras|Media Studio|2|1|3900
+Sony A7 IV|Cameras|Media Studio|2|1|2500
+Canon C70|Cameras|Media Studio|1|1|5500
+Sony 24-70mm GM Lens|Cameras|Storage Cage|3|1|2200
+Shure SLXD24 Wireless Mic|Audio|Main Auditorium|6|2|650
+Shure SM58 Handheld|Audio|Main Auditorium|8|3|99
+Rode NTG3 Shotgun Mic|Audio|Media Studio|3|1|700
+Sennheiser HD280 Headphones|Audio|Control Room|6|2|100
+JBL EON715 Speaker|Audio|Main Auditorium|4|2|550
+Yamaha MG16XU Mixer|Audio|Control Room|2|1|600
+Behringer X32 Digital Mixer|Audio|Control Room|1|1|2500
+Epson Pro EX11000 Projector|Projection|Main Auditorium|3|1|1500
+Epson L610U Laser Projector|Projection|Storage Cage|2|1|3200
+Projector Screen 120in|Projection|Storage Cage|4|1|240
+Aputure 300D II LED Light|Lighting|Media Studio|3|1|900
+Godox SL60W Panel|Lighting|Media Studio|5|2|150
+Elation Par Can LED|Lighting|Main Auditorium|12|4|180
+Neewer Softbox Kit|Lighting|Media Studio|2|1|120
+HDMI 15ft Cable|Cables|Storage Cage|3|5|12
+XLR 25ft Cable|Cables|Storage Cage|14|6|18
+SDI 50ft Cable|Cables|Storage Cage|8|3|35
+Power Strip 6-outlet|Cables|Storage Cage|9|4|15
+Manfrotto 504X Tripod|Support|Media Studio|4|2|600
+Tripod Dolly|Support|Media Studio|2|1|130
+C-Stand with Arm|Support|Main Auditorium|6|2|110
+Mic Stand Boom|Support|Main Auditorium|10|4|35
+MacBook Pro 16in Edit Laptop|Computing|Media Studio|2|1|2800
+Blackmagic ATEM Mini Pro|Computing|Control Room|2|1|300
+SanDisk 1TB SSD|Computing|Media Studio|6|3|110`;
+ const items=raw.split('\n').map(r=>{const p=r.split('|');return{id:uid(),n:p[0],cat:c(p[1]),loc:l(p[2]),qty:+p[3],min:+p[4],price:+p[5]}});
+ const co=[{id:uid(),item:items[0].id,who:people[0].id,out:day(-9),due:day(-2),back:null},{id:uid(),item:items[4].id,who:people[1].id,out:day(-1),due:day(5),back:null}];
+ return{items,cats,locs,people,co,log:[{t:Date.now(),m:'Sample data loaded'}]}}
+try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){}
+if(!S)S=seed();
+if(!S.inst){const d=seedInst();S.rooms=d.rooms;S.inst=d.inst}
+function seedInst(){
+ const rooms=['Board Room','Conference Room A','Conference Room B','Training Room'].map(n=>({id:uid(),n}));const r=n=>rooms.find(x=>x.n==n).id;
+ const raw=`75in Wall Display|Board Room|Display|Samsung QM75B|Working|2023-03-10
+Ceiling Mic Array|Board Room|Audio|Shure MXA910|Working|2023-03-10
+Video Conferencing Bar|Board Room|Video Conferencing|Poly Studio X70|Working|2023-03-12
+Touch Panel Controller|Board Room|Control|Crestron TSW-770|Working|2023-03-12
+Ceiling Speakers (x4)|Board Room|Audio|JBL Control 26CT|Working|2023-03-10
+DSP Processor|Board Room|Audio|Biamp Tesira Forte|Working|2023-03-11
+65in Wall Display|Conference Room A|Display|LG 65UR640S|Working|2022-08-02
+Video Bar|Conference Room A|Video Conferencing|Logitech Rally Bar|Needs service|2022-08-02
+Wireless Presentation|Conference Room A|Control|Barco ClickShare CX-30|Working|2022-08-05
+Laser Projector|Conference Room B|Projection|Epson EB-L630U|Working|2021-11-20
+Motorized Screen 110in|Conference Room B|Projection|Elite Screens Spectrum|Working|2021-11-20
+Wall Plate HDMI/USB-C|Conference Room B|Network|Extron HDMI Pass-Thru|Offline|2021-11-22
+PTZ Camera|Training Room|Video Conferencing|Sony SRG-A40|Working|2024-01-15
+Wireless Lectern Mic|Training Room|Audio|Shure QLXD4|Working|2024-01-15
+55in Confidence Monitor|Training Room|Display|Samsung QB55B|Working|2024-01-16`;
+ const inst=raw.split('\n').map((l,k)=>{const p=l.split('|');return{id:uid(),n:p[0],room:r(p[1]),type:p[2],sn:p[3],st:p[4],date:p[5],note:''}});
+ return{rooms,inst}}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+const log=m=>{S.log.unshift({t:Date.now(),m});S.log=S.log.slice(0,200)};
+const nm=(a,id)=>(S[a].find(x=>x.id==id)||{n:'—'}).n;
+const act=i=>S.co.filter(c=>c.item==i.id&&!c.back).length,avail=i=>i.qty-act(i);
+const status=i=>avail(i)<=0?['Out of stock','er']:avail(i)<=i.min?['Low','wn']:['In stock','ok'];
+const overdue=c=>!c.back&&c.due<day(0);
+const late=c=>Math.round((new Date(day(0))-new Date(c.due))/864e5);
+const NAV=[['dash','Dashboard'],['inv','Equipment'],['co','Checkout'],['inst','Room Installs'],['cats','Categories'],['locs','Locations'],['people','People'],['log','Activity Log']];
+function go(v){view=v;nav.classList.remove('open');render()}
+function render(){
+ $('#nav').innerHTML='<h1>AV Inventory Pro<small>Audio Visual Dept.</small></h1>'+NAV.map(([k,t])=>`<a class="${k==view?'on':''}" onclick="go('${k}')">${t}</a>`).join('');
+ $('#v').innerHTML=({dash,inv,co,inst,cats:()=>simple('cats','Categories','items','cat'),locs:()=>simple('locs','Locations','items','loc'),people:()=>simple('people','People','co','who'),log:logv})[view]();save()}
+function dash(){
+ const val=S.items.reduce((a,i)=>a+i.qty*i.price,0),units=S.items.reduce((a,i)=>a+i.qty,0);
+ const low=S.items.filter(i=>status(i)[1]!='ok'),od=S.co.filter(overdue);
+ const bc=S.cats.map(c=>[c.n,S.items.filter(i=>i.cat==c.id).reduce((a,i)=>a+i.qty*i.price,0)]).sort((a,b)=>b[1]-a[1]),mx=Math.max(...bc.map(x=>x[1]),1);
+ const st={ok:0,wn:0,er:0};S.items.forEach(i=>st[status(i)[1]]++);
+ const tot=S.items.length||1,C=2*Math.PI*40;let off=0;
+ const arcs=[['ok','In stock'],['wn','Low'],['er','Out']].map(([k])=>{const len=C*st[k]/tot,s=`<circle r="40" cx="60" cy="60" fill="none" stroke="var(--${k})" stroke-width="18" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-off}" transform="rotate(-90 60 60)"/>`;off+=len;return s}).join('');
+ return `<h2>Dashboard</h2><div class="grid">
+ <div class="card"><h3>Stock value</h3><div class="big">${money(val)}</div></div>
+ <div class="card"><h3>Items / units</h3><div class="big">${S.items.length} / ${units}</div></div>
+ <div class="card"><h3>Checked out</h3><div class="big">${S.co.filter(c=>!c.back).length}</div></div>
+ <div class="card"><h3>Overdue</h3><div class="big ${od.length?'er':''}">${od.length}</div></div>
+ <div class="card"><h3>Room installs needing attention</h3><div class="big ${S.inst.some(x=>x.st!='Working')?'wn':''}">${S.inst.filter(x=>x.st!='Working').length} <span class="mu" style="font-size:14px">of ${S.inst.length}</span></div></div></div>
+ <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+ <div class="card"><h3>Value by category</h3>${bc.map(([n,v])=>`<div class="bar"><span>${esc(n)}</span><i style="width:${v/mx*60}%"></i><span>${money(v)}</span></div>`).join('')}</div>
+ <div class="card"><h3>Status</h3><div class="row"><svg width="120" height="120" viewBox="0 0 120 120">${arcs}</svg><div><div class="ok">● In stock ${st.ok}</div><div class="wn">● Low ${st.wn}</div><div class="er">● Out ${st.er}</div></div></div></div>
+ <div class="card"><h3>Low-stock alerts</h3>${low.length?low.map(i=>`<div>${esc(i.n)} <span class="mu">— ${avail(i)} of ${i.qty} available</span></div>`).join(''):'<span class="mu">All stocked</span>'}</div>
+ <div class="card"><h3>Recent activity</h3><ul class="log">${S.log.slice(0,6).map(l=>`<li>${esc(l.m)} <span class="mu">${new Date(l.t).toLocaleString()}</span></li>`).join('')}</ul></div></div>`}
+function inv(){
+ const rows=S.items.filter(i=>(!q||i.n.toLowerCase().includes(q))&&(!fc||i.cat==fc)&&(!fl||i.loc==fl));
+ const opt=(a,v)=>S[a].map(x=>`<option value="${x.id}" ${x.id==v?'selected':''}>${esc(x.n)}</option>`).join('');
+ return `<h2>Equipment Inventory</h2><div class="row"><input placeholder="Search…" value="${esc(q)}" oninput="q=this.value.toLowerCase();render();const e=$('#v input');e.focus();e.setSelectionRange(99,99)">
+ <select onchange="fc=this.value;render()"><option value="">All categories</option>${opt('cats',fc)}</select>
+ <select onchange="fl=this.value;render()"><option value="">All locations</option>${opt('locs',fl)}</select>
+ <button class="p" onclick="itemForm()">+ Add item</button></div>
+ <div class="card tw"><table><tr><th>Item</th><th>Category</th><th>Location</th><th>Avail / Total</th><th>Unit price</th><th>Status</th><th></th></tr>
+ ${rows.map(i=>{const s=status(i);return `<tr><td>${esc(i.n)}</td><td>${esc(nm('cats',i.cat))}</td><td>${esc(nm('locs',i.loc))}</td><td>${avail(i)} / ${i.qty}</td><td>${money(i.price)}</td><td><span class="tag ${s[1]}">${s[0]}</span></td><td><button class="s" onclick="itemForm('${i.id}')">Edit</button> <button class="s d" onclick="delItem('${i.id}')">Delete</button></td></tr>`}).join('')||'<tr><td colspan="7" class="mu">No items</td></tr>'}</table></div>`}
+function dlg(html){$('#dlg').innerHTML=html;$('#dlg').showModal()}
+const sel=(a,v,id)=>`<select id="${id}">${S[a].map(x=>`<option value="${x.id}" ${x.id==v?'selected':''}>${esc(x.n)}</option>`).join('')}</select>`;
+function itemForm(id){
+ const i=S.items.find(x=>x.id==id)||{n:'',qty:1,min:1,price:0};
+ dlg(`<h3>${id?'Edit':'Add'} item</h3><label>Name<input id="f1" value="${esc(i.n)}"></label><label>Category${sel('cats',i.cat,'f2')}</label><label>Location${sel('locs',i.loc,'f3')}</label>
+ <label>Quantity<input id="f4" type="number" min="0" value="${i.qty}"></label><label>Low-stock threshold<input id="f5" type="number" min="0" value="${i.min}"></label><label>Unit price ($)<input id="f6" type="number" min="0" value="${i.price}"></label>
+ <div class="row"><button class="p" onclick="saveItem('${id||''}')">Save</button><button onclick="$('#dlg').close()">Cancel</button></div>`)}
+function saveItem(id){
+ const d={n:$('#f1').value.trim(),cat:$('#f2').value,loc:$('#f3').value,qty:+$('#f4').value,min:+$('#f5').value,price:+$('#f6').value};
+ if(!d.n||!d.cat||!d.loc)return alert('Name, category and location are required');
+ if(id){Object.assign(S.items.find(x=>x.id==id),d);log('Updated '+d.n)}else{S.items.push({id:uid(),...d});log('Added '+d.n)}
+ $('#dlg').close();render()}
+function delItem(id){const i=S.items.find(x=>x.id==id);
+ if(act(i))return alert('Cannot delete: item is checked out.');
+ if(confirm('Delete '+i.n+'?')){S.items=S.items.filter(x=>x!==i);log('Deleted '+i.n);render()}}
+function co(){
+ const list=S.co.filter(c=>tab=='active'?!c.back:c.back).sort((a,b)=>a.due<b.due?-1:1);
+ return `<h2>Checkout / Check-in</h2><div class="row tabs"><button class="${tab=='active'?'on':''}" onclick="tab='active';render()">Active</button><button class="${tab!='active'?'on':''}" onclick="tab='hist';render()">History</button><button class="p" onclick="coForm()">+ Check out</button></div>
+ <div class="card tw"><table><tr><th>Item</th><th>Person</th><th>Out</th><th>Due</th><th>${tab=='active'?'Status':'Returned'}</th><th></th></tr>
+ ${list.map(c=>`<tr><td>${esc(nm('items',c.item))}</td><td>${esc(nm('people',c.who))}</td><td>${c.out}</td><td>${c.due}</td><td>${tab=='active'?(overdue(c)?`<span class="tag er">${late(c)} day${late(c)>1?'s':''} late</span>`:'<span class="tag ok">On loan</span>'):c.back}</td><td>${tab=='active'?`<button class="s" onclick="checkin('${c.id}')">Check in</button>`:''}</td></tr>`).join('')||'<tr><td colspan="6" class="mu">Nothing here</td></tr>'}</table></div>`}
+function coForm(){
+ const av=S.items.filter(i=>avail(i)>0);
+ if(!av.length||!S.people.length)return alert('Need available items and at least one person.');
+ dlg(`<h3>Check out equipment</h3><label>Item<select id="c1">${av.map(i=>`<option value="${i.id}">${esc(i.n)} (${avail(i)} avail)</option>`).join('')}</select></label><label>Person${sel('people','','c2')}</label><label>Due date<input id="c3" type="date" value="${day(7)}"></label>
+ <div class="row"><button class="p" onclick="doOut()">Check out</button><button onclick="$('#dlg').close()">Cancel</button></div>`)}
+function doOut(){const c={id:uid(),item:$('#c1').value,who:$('#c2').value,out:day(0),due:$('#c3').value,back:null};if(!c.due)return;
+ S.co.push(c);log(`${nm('items',c.item)} checked out to ${nm('people',c.who)}`);$('#dlg').close();render()}
+function checkin(id){const c=S.co.find(x=>x.id==id);c.back=day(0);log(`${nm('items',c.item)} checked in from ${nm('people',c.who)}`);render()}
+function simple(k,title,ref,fk){
+ return `<h2>${title}</h2><div class="row"><input id="ni" placeholder="New name…"><button class="p" onclick="addS('${k}')">Add</button></div>
+ <div class="card tw"><table><tr><th>Name</th><th>${ref=='co'?'Checkouts':'Items'}</th><th></th></tr>${S[k].map(x=>{const n=S[ref].filter(r=>r[fk]==x.id).length;return `<tr><td>${esc(x.n)}</td><td>${n}</td><td><button class="s d" onclick="delS('${k}','${ref}','${fk}','${x.id}')">Delete</button></td></tr>`}).join('')}</table></div>`}
+function addS(k){const n=$('#ni').value.trim();if(!n)return;S[k].push({id:uid(),n});log(`Added ${k}: ${n}`);render()}
+function delS(k,ref,fk,id){const x=S[k].find(a=>a.id==id);
+ if(S[ref].some(r=>r[fk]==id))return alert(`Cannot delete "${x.n}": it is still in use.`);
+ if(confirm('Delete '+x.n+'?')){S[k]=S[k].filter(a=>a!==x);log(`Deleted ${k}: ${x.n}`);render()}}
+let fr='';const ITYPES=['Display','Audio','Video Conferencing','Control','Projection','Network','Other'],ISTAT=['Working','Needs service','Offline'];
+const scls=s=>s=='Working'?'ok':s=='Offline'?'er':'wn';
+function inst(){
+ const rows=S.inst.filter(x=>!fr||x.room==fr);
+ return `<h2>Permanently Installed Equipment</h2><div class="grid">${S.rooms.map(r=>{const l=S.inst.filter(x=>x.room==r.id),bad=l.filter(x=>x.st!='Working').length;return `<div class="card"><h3>${esc(r.n)}</h3><div class="big">${l.length}</div><div class="${bad?'wn':'mu'}">${bad?bad+' need attention':'all working'}</div><button class="s d" style="margin-top:8px" onclick="delS('rooms','inst','room','${r.id}')">Remove room</button></div>`}).join('')}</div>
+ <div class="row"><select onchange="fr=this.value;render()"><option value="">All rooms</option>${S.rooms.map(r=>`<option value="${r.id}" ${r.id==fr?'selected':''}>${esc(r.n)}</option>`).join('')}</select><button onclick="addRoom()">+ Add room</button><button class="p" onclick="instForm()">+ Add install</button></div>
+ <div class="card tw"><table><tr><th>Equipment</th><th>Room</th><th>Type</th><th>Model / Serial</th><th>Installed</th><th>Status</th><th></th></tr>
+ ${rows.map(x=>`<tr><td>${esc(x.n)}</td><td>${esc(nm('rooms',x.room))}</td><td>${esc(x.type)}</td><td>${esc(x.sn)}</td><td>${esc(x.date)}</td><td><span class="tag ${scls(x.st)}">${esc(x.st)}</span></td><td><button class="s" onclick="instForm('${x.id}')">Edit</button> <button class="s d" onclick="delInst('${x.id}')">Delete</button></td></tr>`).join('')||'<tr><td colspan="7" class="mu">No installed equipment</td></tr>'}</table></div>`}
+const opts=(a,v)=>a.map(o=>`<option ${o==v?'selected':''}>${o}</option>`).join('');
+function instForm(id){
+ if(!S.rooms.length)return alert('Add a room first.');
+ const x=S.inst.find(a=>a.id==id)||{n:'',sn:'',type:'Display',st:'Working',date:day(0),room:fr};
+ dlg(`<h3>${id?'Edit':'Add'} installed equipment</h3><label>Name<input id="g1" value="${esc(x.n)}"></label><label>Room${sel('rooms',x.room,'g2')}</label><label>Type<select id="g3">${opts(ITYPES,x.type)}</select></label>
+ <label>Model / Serial<input id="g4" value="${esc(x.sn)}"></label><label>Install date<input id="g5" type="date" value="${x.date}"></label><label>Status<select id="g6">${opts(ISTAT,x.st)}</select></label>
+ <div class="row"><button class="p" onclick="saveInst('${id||''}')">Save</button><button onclick="$('#dlg').close()">Cancel</button></div>`)}
+function saveInst(id){
+ const d={n:$('#g1').value.trim(),room:$('#g2').value,type:$('#g3').value,sn:$('#g4').value.trim(),date:$('#g5').value,st:$('#g6').value};
+ if(!d.n)return alert('Name is required');
+ if(id){Object.assign(S.inst.find(x=>x.id==id),d);log(`Updated install: ${d.n} (${nm('rooms',d.room)})`)}else{S.inst.push({id:uid(),note:'',...d});log(`Installed ${d.n} in ${nm('rooms',d.room)}`)}
+ $('#dlg').close();render()}
+function delInst(id){const x=S.inst.find(a=>a.id==id);if(confirm('Remove '+x.n+' from the install list?')){S.inst=S.inst.filter(a=>a!==x);log(`Removed install: ${x.n}`);render()}}
+function addRoom(){const n=(prompt('Room name')||'').trim();if(n){S.rooms.push({id:uid(),n});log('Added room: '+n);render()}}
+function logv(){return `<h2>Activity Log</h2><div class="card"><ul class="log">${S.log.map(l=>`<li>${esc(l.m)} <span class="mu">— ${new Date(l.t).toLocaleString()}</span></li>`).join('')}</ul></div>
+ <div class="row" style="margin-top:12px"><button class="d" onclick="if(confirm('Reset all data to sample set?')){S=seed();render()}">Reset sample data</button></div>`}
+render();
+</script></body></html>
