@@ -41,7 +41,7 @@ function migrate(s) {
   return s;
 }
 
-function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { } }
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { } ghAuto(); }
 function log(m) { S.log.unshift({ t: Date.now(), m }); S.log = S.log.slice(0, 200); }
 const nm = (a, id) => (S[a].find(x => x.id == id) || { n: '—' }).n;
 
@@ -422,7 +422,15 @@ function logv() {
 function datav() {
   const bytes = (localStorage.getItem(KEY) || '').length;
   const kb = bytes > 1024 ? (bytes / 1024).toFixed(1) + ' KB' : bytes + ' B';
-  return `<h2>Data & Backup</h2><div class="grid">
+  const c = ghCfg();
+  return `<h2>Data & Backup</h2>
+  <div class="card" style="margin-bottom:12px"><h3>GitHub sync — data saved as a file in a repo</h3>
+  ${ghReady() ? `<div class="kv" style="margin-bottom:10px"><i>Repo</i><b>${esc(c.owner)}/${esc(c.repo)} · branch ${esc(c.branch || 'main')}</b><i>Data file</i><b>${esc(c.path || 'data/inventory.json')}</b><i>Last sync</i><b>${c.lastSync ? esc(c.lastSync.slice(0, 16).replace('T', ' ')) + ' UTC' : 'never'}</b><i>Auto-sync</i><b>${c.auto ? 'On — pushes ~15 s after changes, pulls on startup' : 'Off'}</b></div>` : '<p class="mu">Not configured yet. Your inventory data can be committed to a GitHub repo (ideally a <b>private</b> one) through the GitHub API — so every device shares the same data.</p>'}
+  <div class="row"><input id="ghOwner" placeholder="owner, e.g. sterio1production" style="max-width:230px" value="${esc(c.owner || '')}"><input id="ghRepo" placeholder="repo, e.g. av-inventory-data" style="max-width:230px" value="${esc(c.repo || '')}"><input id="ghBranch" placeholder="branch" style="max-width:100px" value="${esc(c.branch || 'main')}"><input id="ghPath" placeholder="file path" style="max-width:190px" value="${esc(c.path || 'data/inventory.json')}"></div>
+  <div class="row"><input id="ghToken" type="password" placeholder="${c.token ? 'token is saved — leave blank to keep it' : 'personal access token (fine-grained, Contents: Read & write)'}" style="flex:1;min-width:240px"><button class="p" onclick="ghSaveCfg()">Save & test</button></div>
+  <div class="row"><button onclick="ghPull(false)">Pull now</button><button class="p" onclick="ghPush(false)">Push now</button><button onclick="ghToggleAuto()">${c.auto ? 'Turn auto-sync off' : 'Turn auto-sync on'}</button></div>
+  <p class="mu" style="margin:8px 0 0;font-size:12px">Token: open <a class="lnk" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com/settings/personal-access-tokens/new</a> → Repository access: <b>Only select repositories</b> → pick the data repo → Permissions → Contents: <b>Read and write</b>. The token is stored only in this browser. If the repo is public, the data file is public too — use a <b>private</b> repo for real inventory. First time: <b>Push now</b> uploads current data, then turn auto-sync on.</p></div>
+  <div class="grid">
   <div class="card"><h3>Export CSV</h3><p class="mu">Spreadsheet-friendly exports of current data.</p><div class="row"><button class="p" onclick="csvItems()">Equipment CSV</button><button onclick="csvCO()">Checkout history CSV</button></div></div>
   <div class="card"><h3>Backup / restore (JSON)</h3><p class="mu">Full snapshot — items, checkouts, service records, installs, log. Data lives only in this browser: keep regular off-device copies.</p><div class="row"><button class="p" onclick="jsonExport()">Download backup</button><label class="filebtn">Restore backup…<input type="file" accept=".json,application/json" onchange="jsonImport(this)"></label></div></div>
   <div class="card"><h3>Danger zone</h3><div class="row"><button class="d" onclick="resetSample()">Reset to sample data</button><button class="d" onclick="clearAll()">Erase all data</button></div></div>
@@ -473,6 +481,100 @@ function clearAll() {
   }
 }
 
+/* ---------- GitHub sync (data as a JSON file in a repo, via Contents API) ---------- */
+const GKEY = KEY + '-gh';
+const ghCfg = () => { try { return JSON.parse(localStorage.getItem(GKEY)) || {}; } catch (e) { return {}; } };
+const ghSet = c => localStorage.setItem(GKEY, JSON.stringify(c));
+const ghReady = () => { const c = ghCfg(); return !!(c.token && c.owner && c.repo); };
+let ghPushTimer = null, ghBusy = false;
+function dataHash(s) { const str = JSON.stringify(s); let h = 5381; for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0; return String(h); }
+const ghClean = () => localStorage.getItem(KEY + '-hash') == null || localStorage.getItem(KEY + '-hash') === dataHash(S);
+
+function utf8ToB64(str) { const b = new TextEncoder().encode(str); let s = ''; for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s); }
+function b64ToUtf8(b64) { const s = atob(String(b64).replace(/\s/g, '')); const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return new TextDecoder().decode(b); }
+function ghApi(method, p, body) {
+  const c = ghCfg();
+  return fetch('https://api.github.com' + p, {
+    method,
+    headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + c.token, 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined
+  }).then(async r => {
+    if (r.status === 404) return null;
+    const j = await r.json().catch(() => null);
+    if (!r.ok) throw new Error(j && j.message ? r.status + ': ' + j.message : 'HTTP ' + r.status);
+    return j;
+  });
+}
+const ghRef = c => `/repos/${encodeURIComponent(c.owner)}/${encodeURIComponent(c.repo)}/contents/${encodeURIComponent(c.path || 'data/inventory.json').replace(/%2F/g, '/')}?ref=${encodeURIComponent(c.branch || 'main')}`;
+
+async function ghPull(silent) {
+  if (!ghReady()) { if (!silent) alert('Configure owner, repo and token first.'); return false; }
+  ghBusy = true;
+  try {
+    const c = ghCfg();
+    const j = await ghApi('GET', ghRef(c));
+    if (!j || !j.content) { if (!silent) alert('No data file at ' + (c.path || 'data/inventory.json') + ' yet — use Push now to create it.'); return false; }
+    const w = JSON.parse(b64ToUtf8(j.content));
+    const d = w.data || w;
+    if (!Array.isArray(d.items)) throw new Error('file does not contain inventory data');
+    const same = JSON.stringify(d) === JSON.stringify(S);
+    if (!same && !silent && !ghClean() && !confirm('Remote has changes, but this browser has unsynced edits.\nOK = load remote (local edits lost), Cancel = keep local (next push overwrites remote).')) { return false; }
+    if (!same && (silent || ghClean())) { S = migrate(d); log('Pulled data from GitHub (' + c.owner + '/' + c.repo + ')'); }
+    ghSet({ ...c, lastSync: new Date().toISOString(), sha: j.sha });
+    localStorage.setItem(KEY + '-hash', dataHash(S));
+    save(); render();
+    return true;
+  } catch (e) { if (!silent) alert('Pull failed: ' + e.message); return false; }
+  finally { ghBusy = false; }
+}
+
+async function ghPush(silent) {
+  if (!ghReady()) { if (!silent) alert('Configure owner, repo and token first.'); return false; }
+  ghBusy = true;
+  try {
+    const c = ghCfg();
+    let sha = c.sha || null;
+    if (!sha) { const j = await ghApi('GET', ghRef(c)); sha = j ? j.sha : undefined; }
+    const body = { message: 'AV inventory data sync — ' + new Date().toISOString().replace('T', ' ').slice(0, 16), content: utf8ToB64(JSON.stringify({ app: 'av-inventory-pro', ver: 2, exported: new Date().toISOString(), data: S }, null, 1)), branch: c.branch || 'main' };
+    if (sha) body.sha = sha;
+    const j = await ghApi('PUT', ghRef(c).split('?')[0], body);
+    ghSet({ ...c, lastSync: new Date().toISOString(), sha: (j.content && j.content.sha) || (j.commit && j.commit.sha) });
+    localStorage.setItem(KEY + '-hash', dataHash(S));
+    log('Pushed data to GitHub (' + c.owner + '/' + c.repo + ')');
+    render();
+    return true;
+  } catch (e) {
+    if (!silent) alert(String(e.message).startsWith('409') ? 'Remote changed since last sync — Pull first, then Push.' : 'Push failed: ' + e.message);
+    return false;
+  }
+  finally { ghBusy = false; }
+}
+
+function ghAuto() {
+  const c = ghCfg();
+  if (!c.auto || !ghReady() || ghBusy) return;
+  clearTimeout(ghPushTimer);
+  ghPushTimer = setTimeout(() => { if (!ghBusy && ghReady() && ghCfg().auto && !ghClean()) ghPush(true); }, 15000);
+}
+
+async function ghSaveCfg() {
+  const old = ghCfg();
+  const c = {
+    owner: $('#ghOwner').value.trim(), repo: $('#ghRepo').value.trim(),
+    branch: $('#ghBranch').value.trim() || 'main', path: $('#ghPath').value.trim() || 'data/inventory.json',
+    token: $('#ghToken').value.trim() || old.token || '', auto: !!old.auto
+  };
+  if (!c.owner || !c.repo || !c.token) return alert('Owner, repo and token are required.');
+  ghSet(c);
+  try {
+    const r = await fetch(`https://api.github.com/repos/${encodeURIComponent(c.owner)}/${encodeURIComponent(c.repo)}`, { headers: { Authorization: 'Bearer ' + c.token, Accept: 'application/vnd.github+json' } });
+    if (!r.ok) throw new Error(r.status === 401 ? 'token rejected (401)' : r.status === 404 ? 'repo not found, or the token has no access to it (404)' : 'HTTP ' + r.status);
+    log('GitHub sync configured: ' + c.owner + '/' + c.repo);
+    render();
+  } catch (e) { alert('Settings saved, but the connection test failed: ' + e.message); }
+}
+function ghToggleAuto() { const c = ghCfg(); c.auto = !c.auto; ghSet(c); if (c.auto) ghAuto(); log('GitHub auto-sync ' + (c.auto ? 'enabled' : 'disabled')); render(); }
+
 /* ---------- Code 39 labels (verified against bwip-js reference encoder) ---------- */
 const C39 = { '0': 'nnnwwnwnn', '1': 'wnnwnnnnw', '2': 'nnwwnnnnw', '3': 'wnwwnnnnn', '4': 'nnnwwnnnw', '5': 'wnnwwnnnn', '6': 'nnwwwnnnn', '7': 'nnnwnnwnw', '8': 'wnnwnnwnn', '9': 'nnwwnnwnn', 'A': 'wnnnnwnnw', 'B': 'nnwnnwnnw', 'C': 'wnwnnwnnn', 'D': 'nnnnwwnnw', 'E': 'wnnnwwnnn', 'F': 'nnwnwwnnn', 'G': 'nnnnnwwnw', 'H': 'wnnnnwwnn', 'I': 'nnwnnwwnn', 'J': 'nnnnwwwnn', 'K': 'wnnnnnnww', 'L': 'nnwnnnnww', 'M': 'wnwnnnnwn', 'N': 'nnnnwnnww', 'O': 'wnnnwnnwn', 'P': 'nnwnwnnwn', 'Q': 'nnnnnnwww', 'R': 'wnnnnnwwn', 'S': 'nnwnnnwwn', 'T': 'nnnnwnwwn', 'U': 'wwnnnnnnw', 'V': 'nwwnnnnnw', 'W': 'wwwnnnnnn', 'X': 'nwnnwnnnw', 'Y': 'wwnnwnnnn', 'Z': 'nwwnwnnnn', '-': 'nwnnnnwnw', '.': 'wwnnnnwnn', ' ': 'nwwnnnwnn', '$': 'nwnwnwnnn', '/': 'nwnwnnnwn', '+': 'nwnnnwnwn', '%': 'nnnwnwnwn', '*': 'nwnnwnwnn' };
 function code39Svg(text, h = 44, narrow = 2, wide = 5) {
@@ -510,3 +612,4 @@ if (!S || !S.items) S = seed();
 S = migrate(S);
 applyTheme();
 render();
+if (ghReady() && ghCfg().auto) ghPull(true);

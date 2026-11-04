@@ -11,9 +11,9 @@ dependencies** and no build step.
 | --- | --- |
 | ![Dashboard](docs/screenshots/dashboard.png) | ![Equipment](docs/screenshots/equipment.png) |
 
-| Item detail (barcode + history) | Dark mode |
+| Item detail (barcode + history) | Data view with GitHub sync |
 | --- | --- |
-| ![Item detail](docs/screenshots/item-detail.png) | ![Dark mode](docs/screenshots/dashboard-dark.png) |
+| ![Item detail](docs/screenshots/item-detail.png) | ![Data & Backup](docs/screenshots/data.png) |
 
 ## Quick start
 
@@ -46,7 +46,7 @@ dependencies** and no build step.
   output was verified symbol-for-symbol against the [bwip-js](https://github.com/metafloor/bwip-js)
   reference implementation.
 - **Data & backup** — CSV export (equipment, checkout history), full JSON backup and
-  restore with validation, storage usage stats, reset/erase.
+  restore with validation, **GitHub sync** (below), storage usage stats, reset/erase.
 - **Activity log** — last 200 mutations, human-readable.
 - **Dark mode** — follows the OS, with an Auto → Light → Dark toggle; responsive layout
   down to phone widths.
@@ -83,6 +83,38 @@ The original single-file prototype is included at
 AV Inventory Pro v2 detects v1-shaped data (no SKUs, no service records, unit-only
 checkouts), assigns SKUs, back-fills the new fields and defaults loan quantities to 1 —
 availability and history are preserved.
+
+## GitHub sync — data saved in a repo
+
+Data can live in a GitHub repo as `data/inventory.json`, written through the GitHub
+Contents API — so every laptop or phone shares one dataset while the app itself stays
+static and serverless.
+
+**One-time setup**
+
+1. Create a **private** repo for data (e.g. `av-inventory-data`). If the repo is public,
+   the data file is public too — don't put real inventory in a public repo.
+2. Create a fine-grained personal access token:
+   [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new)
+   → Repository access: *Only select repositories* → pick the data repo →
+   Permissions → Contents: **Read and write**.
+3. In the app: **Data & Backup → GitHub sync**, fill owner / repo / branch / file path,
+   paste the token, **Save & test**. Then **Push now** once, and turn **auto-sync** on.
+
+**How it behaves**
+
+- *Auto-push* — ~15 s after your last change, the app commits the data file
+  (`AV inventory data sync — <date>`). Idle debounce keeps commit noise low.
+- *Auto-pull* — on startup the app adopts the remote file (if this browser has no
+  unsynced edits); with unsynced local edits it asks before overwriting either side.
+- *Conflicts* — last writer wins; a stale push is rejected (409) and the app tells you
+  to pull first. For a small team this is usually enough; heavy concurrent editing is a
+  job for a real backend (see roadmap).
+- *Token security* — the token is stored only in that browser's `localStorage` and sent
+  only to `api.github.com` over HTTPS. Scope it to the single data repo with
+  Contents-only access. Never paste a token into issues/commits.
+- The file is the same shape as the JSON backup (`{app, ver, exported, data}`), so a
+  synced file can also be restored with **Restore backup**.
 
 ## Printing asset labels
 
