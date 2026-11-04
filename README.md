@@ -15,6 +15,10 @@ dependencies** and no build step.
 | --- | --- |
 | ![Item detail](docs/screenshots/item-detail.png) | ![Reports](docs/screenshots/reports.png) |
 
+| Movements register | Printable approval form |
+| --- | --- |
+| ![Movements](docs/screenshots/movements.png) | ![Movement form](docs/screenshots/movement-form.png) |
+
 ## Quick start
 
 - **Online:** open the live URL above.
@@ -41,6 +45,13 @@ dependencies** and no build step.
   *Permanent transfer* (quantity physically moves to another location, creating/merging a
   stock line there) and *Permanent consumed / written off* (quantity leaves inventory with
   a recorded reason). Every movement stays in the register under its number.
+- **Approval workflow (HOD & GM/AGM)** — every movement starts as *Pending*; the register
+  shows per-movement HOD/GM chips, and the *Appr…* dialog records each approver's
+  decision, name and date. **Printable form** (form ref `AV-INV-MF-01`): A4 voucher with
+  company header, movement metadata, item table with serials, *Issued by / Received by*
+  sign-off boxes and signature blocks for **HOD** and **GM/AGM** with Approved/Rejected
+  tick boxes — print it from the movement dialog (*Save & print form*) or re-print any
+  recorded movement from the register; recorded approvals pre-fill the form.
 - **Reports** — select a specific **location** (Media Studio, Storage Cage…) or a specific
   **room** (Conference Room A/B, Board Room…) and generate that inventory list, plus a
   summary-per-location table (items, units, value, low/out counts) — each exportable.

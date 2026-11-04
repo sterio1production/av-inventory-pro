@@ -36,7 +36,7 @@ function migrate(s) {
     if (!i.sku) i.sku = nextSku(used);
     i.serials ??= ''; i.supplier ??= ''; i.purchased ??= ''; i.nextsvc ??= ''; i.notes ??= '';
   });
-  (s.co || []).forEach(c => { c.qty = c.qty || 1; c.type ??= 'returnable'; c.mvt ??= ''; c.reason ??= ''; c.dest ??= ''; });
+  (s.co || []).forEach(c => { c.qty = c.qty || 1; c.type ??= 'returnable'; c.mvt ??= ''; c.reason ??= ''; c.dest ??= ''; c.appr = normAppr(c.appr); });
   (s.people || []).forEach(p => { p.contact ??= ''; });
   return s;
 }
@@ -286,6 +286,9 @@ function delItem(id) {
 }
 
 /* ---------- movement register (returnable & permanent) ---------- */
+const ORG = { name: 'Stereo 1 Production', sub: 'Sound · Lighting · Staging · Live-stream AV — Kampala, Uganda' }; /* edit for your organisation */
+const defAppr = () => ({ hod: { n: '', d: '', s: 'Pending' }, gm: { n: '', d: '', s: 'Pending' } });
+function normAppr(a) { a = a && typeof a == 'object' ? a : {}; const fix = (x, d) => ({ n: (x && x.n) || '', d: (x && x.d) || '', s: x && ['Approved', 'Rejected'].includes(x.s) ? x.s : 'Pending' }); return { hod: fix(a.hod, defAppr().hod), gm: fix(a.gm, defAppr().gm) }; }
 function nextMvt() { let m = 0; S.co.forEach(c => { const x = /^MV-(\d+)$/.exec(c.mvt || ''); if (x) m = Math.max(m, +x[1]); }); return 'MV-' + String(m + 1).padStart(4, '0'); }
 const MVTTYPE = { returnable: ['Returnable', 'ok'], transfer: ['Transfer', 'wn'], consumed: ['Written off', 'er'] };
 function co() {
@@ -296,15 +299,16 @@ function co() {
   <button class="${tab == 'hist' ? 'on' : ''}" onclick="tab='hist';render()">Returned</button>
   <button class="${tab == 'perm' ? 'on' : ''}" onclick="tab='perm';render()">Permanent</button>
   <button class="p" onclick="coForm()">+ Movement form</button><button onclick="coExp()">Export…</button></div>
-  <div class="card tw"><table><tr><th>Mvt #</th><th>Date</th><th>Type</th><th>Item</th><th>Qty</th><th>Issued to</th><th>Destination / purpose</th><th>Due</th><th>Status</th><th></th></tr>
-  ${list.map(c => { const it = S.items.find(x => x.id == c.item); const tt = MVTTYPE[c.type] || MVTTYPE.returnable;
-    return `<tr><td><code>${esc(c.mvt || '—')}</code></td><td>${c.out}</td><td><span class="tag ${tt[1]}">${tt[0]}</span></td>
+  <div class="card tw"><table><tr><th>Mvt #</th><th>Date</th><th>Type</th><th>Approvals</th><th>Item</th><th>Qty</th><th>Issued to</th><th>Destination / purpose</th><th>Due</th><th>Status</th><th></th></tr>
+  ${list.map(c => { const it = S.items.find(x => x.id == c.item); const tt = MVTTYPE[c.type] || MVTTYPE.returnable; const ap = normAppr(c.appr);
+    const chip = (k, lbl) => { const a = ap[k]; const cls = a.s == 'Approved' ? 'ok' : a.s == 'Rejected' ? 'er' : 'wn'; return `<span class="tag ${cls}" style="font-size:10px;padding:1px 6px">${lbl} ${a.s == 'Approved' ? '✓' : a.s == 'Rejected' ? '✗' : '…'}</span>`; };
+    return `<tr><td><code>${esc(c.mvt || '—')}</code></td><td>${c.out}</td><td><span class="tag ${tt[1]}">${tt[0]}</span></td><td>${chip('hod', 'HOD')} ${chip('gm', 'GM')}</td>
     <td>${it ? `${esc(it.n)} <span class="mu">${esc(it.sku)}</span>` : '<span class="mu">deleted item</span>'}</td>
     <td>${c.qty || 1}</td><td>${esc(nm('people', c.who))}</td>
     <td>${c.type == 'transfer' && c.dest ? `${esc(nm('locs', c.dest))}${c.reason ? ' — ' + esc(c.reason) : ''}` : esc(c.reason || '—')}</td>
     <td>${c.type == 'returnable' ? c.due : '—'}</td>
     <td>${c.type != 'returnable' ? `<span class="tag ${tt[1]}">Closed ${c.back || ''}</span>` : c.back ? esc(c.back) : overdue(c) ? `<span class="tag er">${late(c)} day${late(c) > 1 ? 's' : ''} late</span>` : '<span class="tag ok">On loan</span>'}</td>
-    <td>${c.type == 'returnable' && !c.back ? `<button class="s" onclick="checkin('${c.id}')">Check in</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="10" class="mu">Nothing here</td></tr>'}</table></div>`;
+    <td>${c.type == 'returnable' && !c.back ? `<button class="s" onclick="checkin('${c.id}')">Check in</button> ` : ''}${c.mvt ? `<button class="s" onclick="printMvtForm('${c.mvt}')">Form</button> ` : ''}<button class="s" onclick="apprForm('${c.id}')">Appr…</button></td></tr>`; }).join('') || '<tr><td colspan="11" class="mu">Nothing here</td></tr>'}</table></div>`;
 }
 function coExp() {
   const H = ['Mvt #', 'Date', 'Type', 'Item', 'SKU', 'Qty', 'Issued to', 'Destination / purpose', 'Due', 'Status'];
@@ -328,7 +332,7 @@ function coForm(pre) {
   <div id="dueRow"><label>Due date<input id="m3" type="date" value="${day(7)}"></label></div>
   <div id="destRow" style="display:none"><label>Destination location${sel('locs', '', 'm4')}</label></div>
   <label>Destination / purpose — notes<input id="m5" placeholder="e.g. Client wedding at Speke Resort / moved to Storage Cage"></label>
-  <div class="row"><button class="p" onclick="mvtSave()">Save movement</button><button onclick="$('#dlg').close()">Cancel</button></div>`);
+  <div class="row"><button class="p" onclick="mvtSave()">Save movement</button><button class="p" onclick="mvtSave(true)">Save & print form</button><button onclick="$('#dlg').close()">Cancel</button></div>`);
   addLine();
   if (pre) { const sel1 = $('#lines .ml-item'); if (sel1) { sel1.value = pre; syncLine($('#lines .mvt-line')); } }
   mvtTypeUi();
@@ -362,7 +366,7 @@ function mvtSave() {
     const due = $('#m3').value;
     if (!due) return alert('Due date is required for returnable movements.');
     for (const l of lines) if (l.qty > avail(l.item)) return alert('Only ' + avail(l.item) + ' of ' + l.item.n + ' available.');
-    lines.forEach(l => S.co.push({ id: uid(), mvt, type, item: l.item.id, who, qty: l.qty, out: day(0), due, back: null, reason, dest: '' }));
+    lines.forEach(l => S.co.push({ id: uid(), mvt, type, item: l.item.id, who, qty: l.qty, out: day(0), due, back: null, reason, dest: '', appr: defAppr() }));
     log(`${mvt}: ${lines.map(l => l.item.n + ' ×' + l.qty).join(', ')} issued to ${nm('people', who)} (returnable, due ${due})`);
   } else if (type == 'transfer') {
     const dest = $('#m4').value;
@@ -376,15 +380,75 @@ function mvtSave() {
       const dst = S.items.find(x => x.n == l.item.n && x.cat == l.item.cat && x.loc == dest);
       if (dst) dst.qty += l.qty;
       else S.items.push({ id: uid(), sku: nextSku(new Set(S.items.map(x => x.sku).filter(Boolean))), n: l.item.n, cat: l.item.cat, loc: dest, qty: l.qty, min: 0, price: l.item.price, supplier: l.item.supplier || '', purchased: l.item.purchased || '', serials: '', nextsvc: '', notes: 'Transferred from ' + l.item.sku });
-      S.co.push({ id: uid(), mvt, type, item: l.item.id, who, qty: l.qty, out: day(0), due: '', back: day(0), reason, dest });
+      S.co.push({ id: uid(), mvt, type, item: l.item.id, who, qty: l.qty, out: day(0), due: '', back: day(0), reason, dest, appr: defAppr() });
     });
     log(`${mvt}: ${lines.map(l => l.item.n + ' ×' + l.qty).join(', ')} transferred to ${nm('locs', dest)} (permanent)`);
   } else {
     for (const l of lines) if (l.qty > avail(l.item)) return alert('Only ' + avail(l.item) + ' of ' + l.item.n + ' available.');
-    lines.forEach(l => { l.item.qty -= l.qty; S.co.push({ id: uid(), mvt, type, item: l.item.id, who, qty: l.qty, out: day(0), due: '', back: day(0), reason, dest: '' }); });
+    lines.forEach(l => { l.item.qty -= l.qty; S.co.push({ id: uid(), mvt, type, item: l.item.id, who, qty: l.qty, out: day(0), due: '', back: day(0), reason, dest: '', appr: defAppr() }); });
     log(`${mvt}: ${lines.map(l => l.item.n + ' ×' + l.qty).join(', ')} consumed / written off (permanent)`);
   }
   $('#dlg').close(); render();
+  if (print) printMvtForm(mvt);
+}
+function apprForm(id) {
+  const c = S.co.find(x => x.id == id);
+  const a = normAppr(c.appr);
+  dlg(`<h3>Approvals — ${esc(c.mvt || 'movement')}</h3>
+  <label>HOD — Head of Department decision<select id="a1">${opts(['Pending', 'Approved', 'Rejected'], a.hod.s)}</select></label>
+  <label>HOD name<input id="a2" value="${esc(a.hod.n)}"></label>
+  <label>HOD date<input id="a3" type="date" value="${a.hod.d}"></label>
+  <label>GM / AGM decision<select id="a4">${opts(['Pending', 'Approved', 'Rejected'], a.gm.s)}</select></label>
+  <label>GM / AGM name<input id="a5" value="${esc(a.gm.n)}"></label>
+  <label>GM / AGM date<input id="a6" type="date" value="${a.gm.d}"></label>
+  <div class="row"><button class="p" onclick="saveAppr('${id}')">Save</button><button onclick="$('#dlg').close()">Cancel</button></div>`);
+}
+function saveAppr(id) {
+  const c = S.co.find(x => x.id == id);
+  const appr = { hod: { s: $('#a1').value, n: $('#a2').value.trim(), d: $('#a3').value }, gm: { s: $('#a4').value, n: $('#a5').value.trim(), d: $('#a6').value } };
+  (c.mvt ? S.co.filter(x => x.mvt == c.mvt) : [c]).forEach(x => x.appr = normAppr(appr));
+  log(`Approvals for ${c.mvt || 'movement'}: HOD ${appr.hod.s}, GM/AGM ${appr.gm.s}`);
+  $('#dlg').close(); render();
+}
+/* printable approval voucher: header + items + sign-off + HOD / GM-AGM approval blocks */
+function printMvtForm(mvt) {
+  const lines = mvt ? S.co.filter(c => c.mvt == mvt) : [];
+  if (!lines.length) return alert('This movement has no number yet — create it with the movement form first.');
+  const c0 = lines[0], isRet = c0.type == 'returnable', ap = normAppr(c0.appr);
+  const rows = lines.map((c, i) => { const it = S.items.find(x => x.id == c.item); return `<tr><td style="text-align:center">${i + 1}</td><td>${esc(it ? it.sku : '—')}</td><td>${esc(it ? it.n : 'deleted item')}</td><td style="text-align:center">${c.qty || 1}</td><td>${esc((it && it.serials) || '')}</td></tr>`; }).join('');
+  const box = (title, isAppr, dec, name, date) => `<div class="box"><h4>${title}</h4>${isAppr ? `<div class="chk"><label><input type="checkbox" ${dec == 'Approved' ? 'checked' : ''} disabled> Approved</label> &nbsp;&nbsp; <label><input type="checkbox" ${dec == 'Rejected' ? 'checked' : ''} disabled> Rejected</label></div>` : ''}<div class="line"></div><div class="cap">Name${name ? ': ' + esc(name) : ''}</div><div class="line"></div><div class="cap">Signature${date ? ' — Date: ' + esc(date) : ' & date'}</div></div>`;
+  const w = window.open('', '_blank', 'width=880,height=1000');
+  if (!w) return alert('Allow pop-ups to print the movement form.');
+  w.document.write(`<!doctype html><html><head><title>Movement form ${esc(mvt)}</title><style>
+  @page{size:A4;margin:12mm}body{font:11px/1.4 'Segoe UI',system-ui,sans-serif;color:#111;margin:0}
+  .hdr{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #111;padding-bottom:8px}
+  .org{font-size:21px;font-weight:800;letter-spacing:.3px}.orgsub{font-size:10px;color:#444;margin-top:2px}
+  .ftitle{text-align:right;font-size:14px;font-weight:800;letter-spacing:1.2px;line-height:1.3}
+  table.meta{width:100%;border-collapse:collapse;margin-top:10px}table.meta td{padding:3px 10px 3px 0;font-size:11px;vertical-align:top}
+  .sec{margin-top:16px;font-weight:800;font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;border-bottom:1.5px solid #111;padding-bottom:3px}
+  table.items{width:100%;border-collapse:collapse;margin-top:6px}table.items th,table.items td{border:1px solid #8a8a8a;padding:5px 7px;font-size:10.5px;text-align:left}
+  table.items th{background:#ececec;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px}
+  .sign{display:flex;gap:20px;margin-top:8px}.box{flex:1;border:1px solid #b5b5b5;border-radius:6px;padding:10px;min-height:120px}
+  .box h4{margin:0 0 6px;font-size:10px;text-transform:uppercase;letter-spacing:.5px}.chk{font-size:10.5px;margin-bottom:2px}.chk label{cursor:default}
+  .line{border-bottom:1px solid #444;height:24px;margin-top:10px}.cap{font-size:9px;color:#555;margin-top:3px}
+  .ft{margin-top:16px;border-top:1px solid #999;padding-top:6px;font-size:8.5px;color:#555;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  @media print{.noprint{display:none}}
+  </style></head><body>
+  <div class="hdr"><div><div class="org">${esc(ORG.name)}</div><div class="orgsub">${esc(ORG.sub)}</div></div><div class="ftitle">EQUIPMENT<br>MOVEMENT FORM</div></div>
+  <table class="meta">
+  <tr><td style="width:50%"><b>Movement No:</b> ${esc(mvt)}</td><td><b>Date of issue:</b> ${esc(c0.out)}</td></tr>
+  <tr><td><b>Type:</b> ${isRet ? 'RETURNABLE — item(s) must come back' : 'PERMANENT — transfer / write-off, no return'}</td><td>${isRet ? `<b>Due date:</b> ${esc(c0.due || '')}` : '<b>Return expected:</b> No'}</td></tr>
+  <tr><td><b>Issued to:</b> ${esc(nm('people', c0.who))}</td><td><b>Destination / purpose:</b> ${c0.type == 'transfer' && c0.dest ? esc(nm('locs', c0.dest)) + (c0.reason ? ' — ' + esc(c0.reason) : '') : esc(c0.reason || '—')}</td></tr>
+  </table>
+  <div class="sec">Items</div>
+  <table class="items"><tr><th style="width:5%">#</th><th style="width:14%">SKU</th><th>Item description</th><th style="width:7%">Qty</th><th style="width:30%">Serial no. / remarks</th></tr>${rows}</table>
+  <div class="sec">Sign-off on issue</div>
+  <div class="sign">${box('Issued by (AV officer)', false)}${box('Received by (bearer)', false)}</div>
+  <div class="sec">Approval — required before items are released</div>
+  <div class="sign">${box('HOD — Head of Department', true, ap.hod.s, ap.hod.n, ap.hod.d)}${box('GM / AGM — General Manager', true, ap.gm.s, ap.gm.n, ap.gm.d)}</div>
+  <div class="ft"><span>Form AV-INV-MF-01 · ${esc(mvt)}</span><span>${isRet ? 'Items must be returned by the due date; the bearer is responsible until check-in.' : 'Stock records are updated on approval.'}</span><span>Not valid without HOD and GM/AGM approval</span></div>
+  <script>window.onload=function(){setTimeout(function(){window.print()},250)}</script></body></html>`);
+  w.document.close();
 }
 function checkin(id) {
   const c = S.co.find(x => x.id == id);
